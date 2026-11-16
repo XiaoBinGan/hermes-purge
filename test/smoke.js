@@ -132,12 +132,32 @@ t('resolveHermesBin 返回存在的路径或 hermes', () => {
 });
 
 console.log('\n补丁清单');
-t('21 条补丁，id 唯一', () => {
-  const src = fs.readFileSync(path.join(__dirname, '..', 'bin', 'hermes-purge.js'), 'utf8');
-  const ids = [...src.matchAll(/(?:rep|ins)?\('?([A-Z]\d{2})'?|id: '([A-Z]\d{2})'/g)]
-    .map((m) => m[1] || m[2]).filter(Boolean);
+const purgeSrc = fs.readFileSync(path.join(__dirname, '..', 'bin', 'hermes-purge.js'), 'utf8');
+t('补丁 id 唯一且 ≥24 条', () => {
+  const ids = [...purgeSrc.matchAll(/(?:rep|ins|spl)\('?([A-Z]\d{2}[a-z]?)'?/g)].map((m) => m[1]);
   const uniq = new Set(ids);
-  assert.strictEqual(uniq.size, 21, '实际 ' + uniq.size);
+  assert.ok(uniq.size >= 24, '实际 ' + uniq.size);
+  assert.strictEqual(uniq.size, ids.length, '有重复 id');
+});
+t('拒答重采样三件套都在（C18 / C18b / C18c）', () => {
+  for (const id of ['C18', 'C18b', 'C18c']) {
+    assert.ok(purgeSrc.includes("spl('" + id + "'"), '缺 ' + id);
+  }
+  assert.ok(purgeSrc.includes('_purge_refusal_nudge'), '缺判定函数');
+  assert.ok(purgeSrc.includes('"flag": True'), '缺 nudge flag');
+  assert.ok(purgeSrc.includes('HERMES_PURGE_RETRY'), '缺重试上限');
+});
+t('流式消隐三件套都在（C19b/C19c/C19d/C19e）', () => {
+  for (const id of ['C19b', 'C19c', 'C19d', 'C19e']) {
+    assert.ok(purgeSrc.includes("spl('" + id + "'"), '缺 ' + id);
+  }
+  assert.ok(purgeSrc.includes('_PURGE_STREAM_REFUSAL'), '缺流式正则');
+  assert.ok(purgeSrc.includes('_purge_stream_muted'), '缺静音标志');
+});
+t('C20 温度上线路 + os 引入', () => {
+  assert.ok(purgeSrc.includes("spl('C20'"), '缺 C20');
+  assert.ok(purgeSrc.includes("spl('C20b'"), '缺 C20b');
+  assert.ok(purgeSrc.includes('HERMES_PURGE_TEMPERATURE'), '缺温度 env');
 });
 t('所有补丁都有 note', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'bin', 'hermes-purge.js'), 'utf8');

@@ -13,6 +13,7 @@
  *   --raw           直通，不判定不重试
  *   --api           强制直连模型
  *   --dash          强制走 dashboard
+ *   --desktop       走 dashboard 并声明 surface=desktop（与桌面窗口同一套工具集）
  *   --home=DIR      指定 Hermes 安装目录
  *   --tries=N       覆盖重试次数
  *   --lang=xxx      覆盖语言推断
@@ -64,8 +65,12 @@ const DASH = process.env.HERMES_DASH || 'http://127.0.0.1:9119';
   else if (flags.dash) useDash = true;
   else useDash = await ch.dashAlive(DASH);
 
+  // 桌面端同 surface：--desktop 让 dashboard 会话声明 source=desktop，
+  // gateway 据此挂 {project, desktop_ui} 工具集，与桌面窗口内跑的完全一致。
+  const source = flags.desktop ? 'desktop' : undefined;
+
   const call = useDash
-    ? (t) => ch.viaDash({ base: DASH, ...t })
+    ? (t) => ch.viaDash({ base: DASH, source, ...t })
     : (t) => ch.viaApi({ root, ...t });
 
   if (flags.show) process.stderr.write(`[${lang}/${mode} · ${useDash ? 'dashboard' : 'api'} · 最多 ${tries} 次]\n`);
