@@ -119,6 +119,17 @@ t('找不到时返回 null 而不是崩溃', () => {
   if (old !== undefined) process.env.HERMES_HOME = old;
   assert.ok(r === null || typeof r === 'string');
 });
+t('resolveHermesRoot 返回的目录能读配置', () => {
+  const r = core.resolveHermesRoot('D:\\project\\hermes');
+  if (!r) return; // 换个机器没有 Hermes 就跳过
+  const cfg = core.readHermesConfig(r);
+  assert.ok(cfg && typeof cfg.base === 'string');
+});
+t('resolveHermesBin 返回存在的路径或 hermes', () => {
+  const r = core.resolveHermesRoot('D:\\project\\hermes');
+  const bin = core.resolveHermesBin(r);
+  assert.ok(bin === 'hermes' || fs.existsSync(bin), '返回 ' + bin);
+});
 
 console.log('\n补丁清单');
 t('21 条补丁，id 唯一', () => {

@@ -60,7 +60,7 @@ node bin\hermes-purge.js --revert      # 用 .bak 回滚
 node bin\hermes-purge.js --uninstall   # 回滚 + 清状态目录
 ```
 
-目标目录自动探测：`--target` 优先于 `HERMES_HOME`，再向上查找，最后试常见默认位置。
+目标目录自动探测，顺序：`--target` → `HERMES_HOME` → `HERMES_ROOT` → PATH 上的 `hermes` 反推 → 从当前目录向上查找 → 常见默认位置。
 找不到会明确报错并给出怎么指定，不会静默失败。
 
 ### 21 条补丁
@@ -232,7 +232,7 @@ hermes-purge/
 │   ├── SOUL.md                人格 payload（v2）
 │   └── prefill_messages.json  prefill 引导
 ├── test/
-│   └── smoke.js               36 项自检，不需要真实 Hermes
+│   └── smoke.js               38 项自检，不需要真实 Hermes
 └── state/                     运行时产物（gitignore）
 ```
 
@@ -244,7 +244,7 @@ hermes-purge/
 ## 自检
 
 ```powershell
-node test\smoke.js      # 36/36，不联网、不改文件
+node test\smoke.js      # 38/38，不联网、不改文件
 ```
 
 覆盖：语言 / 重试 / 模式推断、判定三态与宽松模式、opener 拼接去重、路径解析、补丁清单完整性。
