@@ -1,6 +1,6 @@
 MIT License
 
-Copyright (c) 2026 hermes-purge contributors
+Copyright (c) 2026 XiaoBinGan and hermes-purge contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -19,10 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-说明：本工具修改的是**本机已安装的** Hermes Agent 源码。Hermes Agent 本身
-由 Nous Research 以 MIT 许可发布（见其 LICENSE）。本仓库不包含 Hermes 的
-任何源码，只在运行时改写调用方机器上的副本；分发或再分发被改写的 Hermes
-副本时，须同时遵守 Hermes 原有的 MIT 条款。

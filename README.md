@@ -396,6 +396,10 @@ hermes-purge/
 
 MIT，见 [LICENSE](LICENSE)。
 
+本仓库**不包含 Hermes Agent 的任何源码**，只在运行时改写调用方机器上的副本。
+Hermes Agent 本身由 Nous Research 以 MIT 许可发布；再分发被改写的 Hermes 副本时，
+须同时遵守 Hermes 原有的 MIT 条款。
+
 ---
 
 ## 免责声明
