@@ -28,10 +28,12 @@
   "files": [
     "bin/",
     "lib/",
+    "test/",
     "payload/SOUL.md",
     "payload/prefill_messages.json",
     "hp.cmd",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "scripts": {
