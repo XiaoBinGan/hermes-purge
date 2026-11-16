@@ -1,0 +1,52 @@
+{
+  "name": "hermes-purge",
+  "version": "1.0.0",
+  "description": "Hermes Agent 三层清洗：提示词人格、config 审批策略、代码层审批门与黑名单。附破甲执行器与效力边界探针。",
+  "license": "MIT",
+  "author": "XiaoBinGan",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/XiaoBinGan/hermes-purge.git"
+  },
+  "bugs": {
+    "url": "https://github.com/XiaoBinGan/hermes-purge/issues"
+  },
+  "homepage": "https://github.com/XiaoBinGan/hermes-purge#readme",
+  "keywords": [
+    "hermes",
+    "hermes-agent",
+    "patch",
+    "approval",
+    "jailbreak",
+    "redteam"
+  ],
+  "bin": {
+    "hermes-purge": "./bin/hermes-purge.js",
+    "hp": "./bin/hp.js"
+  },
+  "main": "./lib/core.js",
+  "files": [
+    "bin/",
+    "lib/",
+    "payload/SOUL.md",
+    "payload/prefill_messages.json",
+    "hp.cmd",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "status": "node bin/hermes-purge.js --status",
+    "apply": "node bin/hermes-purge.js --apply",
+    "verify": "node bin/hermes-purge.js --verify",
+    "revert": "node bin/hermes-purge.js --revert",
+    "test": "node test/smoke.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "os": [
+    "win32",
+    "linux",
+    "darwin"
+  ]
+}

@@ -1,0 +1,28 @@
+# 运行时产物 —— 绝不要提交
+# 注意用 state/* 而不是 state/：目录被整体忽略时无法再单独放行 .gitkeep
+state/*
+!state/.gitkeep
+
+# 目标机上的备份文件
+*.hermes-purge.bak
+*.garbled
+
+# 运行时 prefill 临时文件
+payload/.runtime-prefill.json
+
+# 依赖与缓存
+node_modules/
+__pycache__/
+*.log
+.pnpm-store/
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 测试临时文件
+*.tmp
+*.bak
