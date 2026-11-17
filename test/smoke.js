@@ -139,13 +139,16 @@ t('补丁 id 唯一且 ≥24 条', () => {
   assert.ok(uniq.size >= 24, '实际 ' + uniq.size);
   assert.strictEqual(uniq.size, ids.length, '有重复 id');
 });
-t('拒答重采样三件套都在（C18 / C18b / C18c）', () => {
-  for (const id of ['C18', 'C18b', 'C18c']) {
+t('拒答重采样四件套都在（C18 / C18b / C18c / C18d）', () => {
+  for (const id of ['C18', 'C18b', 'C18c', 'C18d']) {
     assert.ok(purgeSrc.includes("spl('" + id + "'"), '缺 ' + id);
   }
   assert.ok(purgeSrc.includes('_purge_refusal_nudge'), '缺判定函数');
   assert.ok(purgeSrc.includes('"flag": True'), '缺 nudge flag');
   assert.ok(purgeSrc.includes('HERMES_PURGE_RETRY'), '缺重试上限');
+  // C18d：计数按轮重置。缺了它，cap 跨轮累积 → 一轮打满后整个会话不再重采样。
+  assert.ok(purgeSrc.includes('_purge_refusal_nudges = 0'), '缺按轮重置');
+  assert.ok(purgeSrc.includes('with native_turn_images(user_message):'), 'C18d 锚点漂移');
 });
 t('流式消隐三件套都在（C19b/C19c/C19d/C19e）', () => {
   for (const id of ['C19b', 'C19c', 'C19d', 'C19e']) {

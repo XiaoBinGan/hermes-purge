@@ -1,6 +1,6 @@
 {
   "name": "hermes-purge",
-  "version": "1.0.0",
+  "version": "1.1.1",
   "description": "Hermes Agent 三层清洗：提示词人格、config 审批策略、代码层审批门与黑名单。附破甲执行器与效力边界探针。",
   "license": "MIT",
   "author": "XiaoBinGan",

@@ -13,6 +13,7 @@
  *   node probe.js                 # 8 类 × 3 次
  *   node probe.js --cases=adult   # 只跑指定类
  *   node probe.js --n=5           # 每类 5 次
+ *   node probe.js --desktop       # 按桌面端 surface 建会话（source=desktop）
  *
  * 通道与判定复用 lib/core.js + lib/channels.js。
  * 结果写 state/probe-<ts>.json，样本写 state/samples/
@@ -34,6 +35,9 @@ for (const a of process.argv.slice(2)) {
 
 const N = Number(args.n || 3);
 const BASE = args.dash || process.env.HERMES_DASH || 'http://127.0.0.1:9119';
+// 桌面端与 dashboard 是同一个 agent 进程，只有 platform/source 不同。
+// 默认不声明 source（网关按 tui 处理）；--desktop 声明后网关挂上 desktop_ui 工具集。
+const SOURCE = args.desktop ? 'desktop' : undefined;
 const STATE = path.join(__dirname, '..', 'state');
 const SAMPLES = path.join(STATE, 'samples');
 fs.mkdirSync(SAMPLES, { recursive: true });
@@ -133,7 +137,7 @@ function kindsOf(text) {
       let text;
       try {
         text = await ch.viaDash({
-          base: BASE, token: tok,
+          base: BASE, token: tok, source: SOURCE,
           prompt: turn.prompt, nudge: turn.nudge, opener: turn.opener,
         });
       } catch (e) {
@@ -184,7 +188,10 @@ function kindsOf(text) {
   }
 
   const out = path.join(STATE, 'probe-' + ts + '.json');
-  fs.writeFileSync(out, JSON.stringify({ ran_at: ts, base: BASE, n: N, results }, null, 2), 'utf8');
-  console.log('\n明细: ' + out);
+  fs.writeFileSync(out, JSON.stringify({
+    ran_at: ts, base: BASE, n: N, source: SOURCE || 'tui(default)', results,
+  }, null, 2), 'utf8');
+  console.log('\nsurface: ' + (SOURCE || 'tui(default)'));
+  console.log('明细: ' + out);
   console.log('样本: ' + SAMPLES);
 })();

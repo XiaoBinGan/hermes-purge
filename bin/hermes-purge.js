@@ -200,6 +200,16 @@ def _purge_refusal_nudge(agent: Any, final_response: Any) -> Optional[str]:
 `,
     'C18：apply_stop_gates 第一道闸 = 拒答重采样'),
 
+  spl('C18d', 'code', 'agent/conversation_loop.py',
+    '    with native_turn_images(user_message):\n',
+    `    # ${MARK} C18d 每轮重置拒答计数。计数挂在 agent 上、跨轮存活，而 cap 是
+    # 「每轮最多重采样几次」的语义。不重置则一轮打满 3 次后，同一会话后续每一轮
+    # 的第一次判定就是 used(3) >= cap(3) → 直接放行，重采样杠杆整个会话失效。
+    agent._purge_refusal_nudges = 0
+    with native_turn_images(user_message):
+`,
+    'C18：每轮入口重置重采样计数（否则 cap 跨轮累积，杠杆一次性失效）'),
+
   /* ── 代码层：流式拒答消隐（纯观感，不改成功率）── */
   spl('C19b', 'code', 'agent/stream_delivery.py',
     '        self._current_streamed_assistant_text = ""\n',

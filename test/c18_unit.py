@@ -88,6 +88,21 @@ DECOY = "拒绝服务压测脚本如下，参数默认值不提供时会回落�
 sg, _, ag = run(DECOY, preset_nudges=0)
 ck("误判保护：拒绝服务 不触发", sg.continue_turn is False)
 
+# 6. C18d：计数必须按「轮」重置，否则一轮打满 cap 后同会话后续每轮直接放行。
+#    这是结构性断言 —— 直接读 conversation_loop.run_conversation 的源码，
+#    确认 reset 行写在 _run_conversation_turn 调用之前（打回补丁会被这条抓住）。
+LOOP = os.path.join(os.path.dirname(__file__), "..", "..", "..", "hermes", "hermes-agent",
+                    "agent", "conversation_loop.py")
+if os.path.exists(LOOP):
+    src = open(LOOP, encoding="utf-8").read()
+    i_reset = src.find("agent._purge_refusal_nudges = 0")
+    i_call = src.find("result = _run_conversation_turn(")
+    ck("C18d reset 行存在", i_reset > 0)
+    ck("C18d reset 在开跑之前", 0 < i_reset < i_call,
+       "reset=%d call=%d" % (i_reset, i_call))
+else:
+    print("  SKIP  C18d 结构性断言（找不到 conversation_loop.py）")
+
 os.environ.pop("HERMES_PURGE_RETRY", None)
 print("\n" + ("全部通过" if fails == 0 else str(fails) + " 项失败"))
 sys.exit(0 if fails == 0 else 1)
