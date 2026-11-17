@@ -11,6 +11,7 @@
 const assert = require('assert');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const core = require('../lib/core');
 
 let pass = 0, fail = 0;
@@ -105,12 +106,15 @@ t('seed 轮换', () => {
 });
 
 console.log('\n路径解析');
+// 平台无关：造一个临时 HERMES_HOME（含 config.yaml），不再写死 D:\project\hermes
+const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'hp-smoke-'));
+fs.writeFileSync(path.join(tmpHome, 'config.yaml'), 'model:\n  default: smoke-model\n');
 t('HERMES_HOME 生效', () => {
   const old = process.env.HERMES_HOME;
-  process.env.HERMES_HOME = 'D:\\project\\hermes';
+  process.env.HERMES_HOME = tmpHome;
   const r = core.resolveHermesRoot(null);
   if (old === undefined) delete process.env.HERMES_HOME; else process.env.HERMES_HOME = old;
-  assert.ok(r && fs.existsSync(path.join(r, 'config.yaml')), '返回 ' + r);
+  assert.strictEqual(r, path.resolve(tmpHome));
 });
 t('找不到时返回 null 而不是崩溃', () => {
   const old = process.env.HERMES_HOME;
@@ -120,19 +124,19 @@ t('找不到时返回 null 而不是崩溃', () => {
   assert.ok(r === null || typeof r === 'string');
 });
 t('resolveHermesRoot 返回的目录能读配置', () => {
-  const r = core.resolveHermesRoot('D:\\project\\hermes');
-  if (!r) return; // 换个机器没有 Hermes 就跳过
+  const r = core.resolveHermesRoot(tmpHome);
+  assert.ok(r, '没解析到 ' + tmpHome);
   const cfg = core.readHermesConfig(r);
-  assert.ok(cfg && typeof cfg.base === 'string');
+  assert.strictEqual(cfg.model, 'smoke-model');
 });
 t('resolveHermesBin 返回存在的路径或 hermes', () => {
-  const r = core.resolveHermesRoot('D:\\project\\hermes');
+  const r = core.resolveHermesRoot(tmpHome);
   const bin = core.resolveHermesBin(r);
   assert.ok(bin === 'hermes' || fs.existsSync(bin), '返回 ' + bin);
 });
 
 console.log('\n补丁清单');
-const purgeSrc = fs.readFileSync(path.join(__dirname, '..', 'bin', 'hermes-purge.js'), 'utf8');
+const purgeSrc = fs.readFileSync(path.join(__dirname, '..', 'lib', 'patches.js'), 'utf8');
 t('补丁 id 唯一且 ≥24 条', () => {
   const ids = [...purgeSrc.matchAll(/(?:rep|ins|spl)\('?([A-Z]\d{2}[a-z]?)'?/g)].map((m) => m[1]);
   const uniq = new Set(ids);
@@ -163,11 +167,12 @@ t('C20 温度上线路 + os 引入', () => {
   assert.ok(purgeSrc.includes('HERMES_PURGE_TEMPERATURE'), '缺温度 env');
 });
 t('所有补丁都有 note', () => {
-  const src = fs.readFileSync(path.join(__dirname, '..', 'bin', 'hermes-purge.js'), 'utf8');
+  const src = fs.readFileSync(path.join(__dirname, '..', 'lib', 'patches.js'), 'utf8');
   const blocks = src.split(/\n  (?:rep|ins)\(|\n  \{ id:/).slice(1);
   const missing = blocks.filter((b) => !b.includes('note:') && !b.includes("', '"));
   assert.ok(missing.length === 0, missing.length + ' 个块缺 note');
 });
 
 console.log('\n' + (fail === 0 ? `全部通过 ${pass}/${pass}` : `${pass} 通过 · ${fail} 失败`));
+try { fs.rmSync(tmpHome, { recursive: true, force: true }); } catch (e) { /* 忽略 */ }
 process.exit(fail === 0 ? 0 : 1);

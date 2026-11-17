@@ -73,6 +73,17 @@ const DASH = process.env.HERMES_DASH || 'http://127.0.0.1:9119';
     ? (t) => ch.viaDash({ base: DASH, source, ...t })
     : (t) => ch.viaApi({ root, ...t });
 
+  // 直连通道先验一次配置：配置错是环境问题，不是模型拒绝。
+  // 以前它被 catch 吞掉，tries 跑完打印「这一类它不做」—— 会把路径错报成拒答。
+  if (!useDash) {
+    try {
+      core.readHermesConfig(root);
+    } catch (e) {
+      process.stderr.write(String(e.message || e) + '\n');
+      process.exit(3);
+    }
+  }
+
   if (flags.show) process.stderr.write(`[${lang}/${mode} · ${useDash ? 'dashboard' : 'api'} · 最多 ${tries} 次]\n`);
 
   let best = '';
@@ -85,6 +96,11 @@ const DASH = process.env.HERMES_DASH || 'http://127.0.0.1:9119';
     try {
       out = await call(turn);
     } catch (e) {
+      // 配置 / 环境类错误直接上抛，别伪装成「被拒」
+      if (e && (e.code === 'EHP_CONFIG' || e.code === 'ENOENT')) {
+        process.stderr.write('环境错误：' + e.message + '\n');
+        process.exit(3);
+      }
       if (flags.show) process.stderr.write(`出错：${e.message}\n`);
       continue;
     }

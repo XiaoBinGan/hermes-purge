@@ -1,5 +1,72 @@
 # Changelog
 
+## 2.0.0 —— capability layer（能力层）
+
+把「补丁集合」升级成「带断言的能力合约」：同一个能力有 AST / shim / 文本 / 配置四条落地路径，
+一条失效自动降级；所有写操作走事务；三级验证；内置观测。macOS + Windows 双平台实测。
+
+### 新增
+
+- `bin/purge.js`：v2 引擎。`status / apply / verify / revert / doctor / stats`
+- **能力模型**（`lib/v2/caps.js`）：31 条 cap = 行为目标 + 实现链 + 断言。安全核心
+  C01–C12 全部有 AST + shim 双路径，结构性改动（C13/C14/C16/C18 系列/C19 系列/C20 系列）
+  如实标注为 text-only
+- **AST 层**（`lib/v2/ast.js` + `_ast.py`）：按符号名定位函数/类/模块级赋值，改完用宿主
+  自己的 python 校验。函数搬家、缩进变化、上游拆模块都不影响
+- **shim 层**（`lib/v2/shim.js`）：往 venv site-packages 写 `_hermes_purge.pth` +
+  `_hermes_purge_shim.py`，用 meta_path 钩子在模块导入后替换符号。**源码一个字节不改**
+  也能让 approval 关死（已实测：pristine 树上只装 shim，`_YOLO_MODE_FROZEN=True`、
+  `detect_hardline_command` 返回 `(False, '')`）
+- **事务**（`lib/v2/txn.js`）：apply 前全量快照 → 原子写 → manifest 记 before/after 双哈希
+  → `revert` 前校验「当前文件 == 我上次写完的样子」，用户手改过就拒绝覆盖（`--force` 才强上）
+  → 回滚后逐字节校验；支持按 id 撤到任意历史快照（撤销栈语义）
+- **三级验证**（`lib/v2/verify.js`）：L1 `py_compile` + YAML 回读；L2 **行为断言**
+  （14 条，直接调用函数，不看源码 —— shim 替换后源码里那条 return 已经不是实际跑的东西）；
+  L3 端到端跑一轮
+- **观测**（`lib/v2/metrics.js`）：`purge stats` 汇总 cap 命中、impl 分布、拒答命中/收敛、成本
+- `test/v2.js`：22 项单元（CRLF/BOM、Win+POSIX 两种 venv 布局、符号定位、AST 幂等、
+  shim 模板可解析、事务回滚与漂移拒绝、cap 清单完整性）
+
+### 修复（都是在 Windows 语义下才会炸的坑，已用 CRLF 树实测）
+
+- `_ast.py` 对 CRLF 文件 insert 行会写出 `\r\r\n` → 文件损坏。改为先剥行尾 `\r` 再按原 eol 拼回
+- 文本层锚点是按 LF 写的，Windows 的 CRLF 文件会全量 drifted。改为**一律在 LF 视图上匹配与改写**，
+  落盘时按文件原 eol 还原
+- 快照 id 精确到毫秒会撞车（同一次 apply 里连建两个快照）→ 加随机后缀，快照永不互相覆盖
+- `splice/replace` 的 `to` 里含 `find`，重复 apply 会叠两份 → 应用前先看 sentinel，命中就跳过
+- shim 模板里 JS 的 `true/false/null` 在 python 里是语法错 → 统一转成 `True/False/None`
+
+### 兼容
+
+- 1.x 的 `bin/hermes-purge.js` 行为不变（照旧吃 `.bak`），与 v2 共用 `lib/patches.js` 的锚点清单
+- 0.21.0 与 0.21.3/0.21.4 两套布局都通过：0.21.0 走 18 条变体，0.21.4 走主锚
+
+## 1.2.0
+
+0.21.0 全量兼容，Windows（0.21.3）路径零改动。
+
+### 新增
+
+- **补丁变体（variants）**：每条补丁可带若干「替代文件 + 替代锚点」。主锚优先，
+  主锚 `applied`/`pending` 就不试变体 —— Windows 上的判定与替换结果与 1.1.1 逐字一致。
+- **0.21.0 变体 18 条**：C04 C05 C06 C11 C12 C13 C14 C16 C18 C18b C18c C18d
+  C19b C19c C19d C19e C20 C20b。0.21.0 还没做 0.21.2/0.21.3 的模块拆分
+  （approval_context / approval_detection / turn_stop_gates / stream_delivery /
+  turn_request_assembly），函数还在 `tools/approval.py`、`agent/conversation_loop.py`、
+  `run_agent.py` 里。
+- 新 kind：`insertAfterAll`（一次插多处，C06 的三个上下文判定）、`noop`（目标版本已内置，C18）。
+- `test/c18_unit_0210.py`：0.21.0 布局下的 15 项断言（函数行为 5 项 + 结构落点 10 项）。
+
+### 修复
+
+- **C14 锚点带缩进**。原锚点在 0.21.3 与 0.21.0 的缩进分别是 8 / 12 空格，旧写法会
+  「匹配成功但替换出 `IndentationError`」。现在主锚带 `\n` + 8 空格，12 空格走变体。
+- `test/smoke.js` 不再写死 `D:\project\hermes`，改用临时 `HERMES_HOME`；41/41 在 macOS 上成立。
+- `lib/core.js` 新增 `configRootOf()`：`readHermesConfig` 会在 `HERMES_HOME` / 父目录里找
+  `config.yaml`；找不到时抛 `EHP_CONFIG` 并说明试过的路径，不再冒 `ENOENT`。
+- `bin/hp.js` 把配置/环境错误按「环境」处理（退出码 3），不再被重试循环吞成
+  「试了 N 次，这一类它不做」——路径错被误报成拒答，会污染 bench 数据。
+
 ## 1.1.1
 
 修掉 1.1.0 里一个会静默废掉最大杠杆的计数 bug，并把文档追平代码。

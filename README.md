@@ -1,12 +1,16 @@
 # hermes-purge
 
-> **本项目的思想来自 dsh-purge —— 那套「不跟模型讲道理，直接改宿主」的思路。**
-> hermes-purge 是同一套思路在 [Hermes Agent](https://github.com/NousResearch/hermes-agent) 上的移植与重写。
+> **我们借鉴了 [dsh-purge](https://github.com/YuJunZhiXue/dsh-purge) 的一个判断：「不跟模型讲道理，直接改宿主」。**
+> 这句话点醒了方向。但**代码不是它的**：引擎、补丁清单、验证方式、CLI 都是为
+> [Hermes Agent](https://github.com/NousResearch/hermes-agent) 独立写的 —— 它跑在 DSH 的插件体系上，
+> 我们改的是 Python 宿主的源码与运行时；两者没有一行共享代码，也没有沿用它的插件形态。
+>
+> 借鉴的是**判断**，不是实现。下面「我们比它强在哪」一节逐条对账。
 
 对 Hermes Agent 做三层清洗：**提示词人格 / config 审批策略 / 代码层审批门与黑名单**。
 附一个破甲执行器和一个效力边界探针。
 
-补丁锚点验证于 **Hermes 0.21.3**。当前版本 **1.1.1**（31 条补丁）。
+补丁主锚验证于 **Hermes 0.21.3**，**0.21.0 全量兼容**（走变体）。当前版本 **2.0.0**（31 条 cap，四层落地）。
 
 ---
 
@@ -242,7 +246,15 @@ node bin/rescore.js                                # 重评已有样本，不重
 ## 自检
 
 ```bash
-node test/smoke.js      # 41/41
+node test/smoke.js      # 41/41（跨平台；不再写死 D:\project\hermes）
+```
+
+拒答重采样的运行时就地断言（需要一个已打过补丁的 Hermes 树）：
+
+```bash
+python test/c18_unit.py                     # 0.21.3 / 0.21.4 布局（turn_stop_gates）
+HERMES_ROOT_FOR_TEST=~/.hermes/hermes-agent \
+  python test/c18_unit_0210.py              # 0.21.0 布局（conversation_loop 内联）
 ```
 
 不联网、不改文件、不需要真实 Hermes。覆盖：语言/重试/模式推断、判定三态与宽松模式、
@@ -297,6 +309,121 @@ opener 拼接去重、路径解析、补丁清单完整性。
   内容全等才判 `applied`，升级 payload 会自动识别为待更新）
 
 ---
+
+## v2：能力层（capability layer）
+
+1.x 是「31 条文本补丁」。v2 把它升级成「31 条能力 + 每条 4 条落地路径」：
+
+| 层 | 做法 | 抗什么 |
+|---|---|---|
+| **AST** | 按符号名定位（函数/类/模块级赋值），用宿主自己的 python 改 | 函数搬家、缩进变化、上游拆模块 |
+| **shim** | 往 venv site-packages 写 `.pth` + 钩子模块，import 后替换符号 | 源码改不动 / 被 wheel 化 / 版本漂移 |
+| **文本** | 1.x 那套锚点（含 0.21.0 变体） | 结构性改动只能靠这个（搬注入点、改循环、加 hook） |
+| **配置** | `config.yaml` / `.env` / `SOUL.md` | —— |
+
+```bash
+node bin/purge.js status          # 每条 cap 当前走哪层实现（[ast] / [shim] / [text]）
+node bin/purge.js apply           # 事务式应用：快照 → 写 → L1 校验
+node bin/purge.js verify          # L1 静态 + L2 行为断言（默认）/ --level=3 端到端
+node bin/purge.js doctor          # 哈希漂移 / 临时文件 / shim 一致性
+node bin/purge.js revert          # 按 manifest 逐字节还原（手改过就拒绝覆盖）
+node bin/purge.js stats           # cap 命中、impl 分布、拒答收敛、成本
+```
+
+**为什么 shim 层值得存在**：在一棵**完全未修改**的 Hermes 树上只装 shim，运行时就已经是
+`_YOLO_MODE_FROZEN=True`、`is_approval_bypass_active()=True`、`detect_hardline_command()=(False, '')`。
+源码一个字节没动 —— 这就是「上游升级导致锚点集体失效」时的兜底。
+
+**为什么 L2 是行为断言而不是源码 grep**：shim 会在运行时替换函数，源码里那条 `return` 已经
+不是实际执行的东西。只有真调用一次才算证明。
+
+**回滚的语义**：apply 前快照（content-addressed），manifest 记 before/after 双哈希；
+revert 前先验证「当前文件 == 我上次写完的样子」，用户手改过就拒绝覆盖（`--force` 才强上）；
+支持按 id 撤到任意历史快照（撤销栈，LIFO）。
+
+### 跨平台（macOS + Windows）
+
+Windows 语义下的三个必踩坑，都已用 CRLF 树实测修掉：
+
+1. `_ast.py` 对 CRLF 文件插行会写出 `\r\r\n` → 文件损坏
+2. 文本锚点按 LF 写的，CRLF 文件会全量 `drifted` → 现在一律在 **LF 视图上匹配改写**，落盘按原 eol 还原
+3. venv 布局两套：`venv/bin/python` + `lib/pythonX.Y/site-packages`（POSIX）与
+   `venv/Scripts/python.exe` + `Lib/site-packages`（Windows），`platform.js` 两套都认
+
+## 我们比 dsh-purge 强在哪
+
+先划清一件事：**它跑 DSH，我们跑 Hermes**，不是同一个宿主上的竞品。这份对照是给我们自己的
+取舍做记录 —— 哪些地方它的做法值得抄、哪些地方它留了坑、我们补了什么。每条都能在本仓库跑出来。
+
+| 维度 | dsh-purge 1.1.71 | 本项目 2.0 | 怎么验 |
+|---|---|---|---|
+| 落地形态 | 一份实现：补丁 + 自身插件 shim | **四层可互换**：AST（符号级）→ shim（运行时）→ 文本 → 配置，一条失效自动降级 | `purge status` 逐条显示走哪层 |
+| 版本韧性 | 锁 dsh 0.2，升版整批失效 | 0.21.0 与 0.21.3/0.21.4 **两套布局都 31/31**；安全核心 C01–C12 有 AST + shim 双路径 | 本仓库实测 |
+| 源码改不动时 | 依赖自身插件生命周期 | **pristine 树只装 shim**，源码一字节未改，运行时已是 `_YOLO_MODE_FROZEN=True` / `detect_hardline_command()=(False,'')` | 按 README「v2」一节复现 |
+| 回滚 | 单份 `.bak`，二次 apply 覆盖原始备份 | 快照多版本 + before/after **双哈希** + 手改拒绝覆盖 + 撤销栈（LIFO） | `test/v2.js` 里有对应用例 |
+| 生效证明 | 重启后目视 | L1 `py_compile`/YAML → L2 **14 条行为断言** → L3 端到端 | `purge verify --level=2` |
+| 观测 | 无 | `metrics.jsonl` + `purge stats`：cap 命中、impl 分布、拒答收敛、成本 | `purge stats` |
+| 平台 | 未注明 | macOS + Windows 都实测；CRLF 三个坑（AST 插行写坏文件、锚点 LF 匹配不上、venv 双布局）已修并由 CRLF 树闭环验证 | `test/v2.js --e2e <CRLF 树>` |
+| 宿主绑定 | 绑死 DSH | cap 只描述**行为**，落地层不认识宿主（跨宿主 adapter 的地基） | `lib/v2/caps.js` |
+| 规模思路 | 88 条 patch（同一行为常有多种表述） | 按**行为**聚合成 31 条 cap，每条带断言；不做条数竞赛 | `purge status` 的 `cap` 列 |
+
+### 三条我们刻意做得比它狠的
+
+1. **不假设文件布局。** 它按文本锚点改，上游一搬函数就整批 `drifted`；我们先用符号名定位
+   （`ast` + 类 + 模块级赋值），找不到才退回文本。0.21.0 把 5 个模块内联进 `tools/approval.py`、
+   0.21.3 又拆出来 —— 这一来一回我们没改一行锚点。
+2. **「落了」和「生效了」分开证。** 它靠重启后目视；我们把 L2 做成**行为断言**：直接调用
+   `is_approval_bypass_active()`、`detect_hardline_command(...)`。原因很实在 —— shim 会在运行时
+   替换函数，源码里那条 `return` 已经不是实际执行的东西，grep 源码会骗自己。
+3. **回滚要能证明。** 二次 apply 覆盖 `.bak` 是真实事故（本项目 1.x 阶段踩过：连跑两次 apply 后，
+   `.bak` 已经不是原始文件）。v2 的快照按 apply 分目录、双哈希、撤销栈，回滚后逐字节校验。
+
+### 三条它比我们成熟的地方（也照实写）
+
+1. **形态完整度**：它是插件，装/卸/更新跟着包管理器走；我们目前是 git clone 直接跑 node。
+2. **交互**：它有会话内菜单与 `/purge` 命令；我们只有 CLI 命令。
+3. **运营**：它有署名要求、商用限制、违规公示这些社区治理层面的事；我们只有 MIT 与免责声明。
+
+## 版本兼容：0.21.3 主锚 + 0.21.0 变体
+
+补丁锚点主验证于 **0.21.3**。**0.21.0 也能全部落下** —— 靠「主锚优先 + 变体回退」：
+
+- 每条补丁可以有若干 `variants`（替代文件 + 替代锚点）
+- 探测顺序：主锚 → 变体。主锚是 `applied`/`pending` 就直接用，**不试变体**
+- 所以 Windows（0.21.3）上的判定与替换结果，和加变体之前逐字一致
+- 变体命中时 `--status` 会在行尾标 `[0.21.0]`，一眼能看出走的是哪条路
+
+为什么需要变体：0.21.2/0.21.3 做了一次模块拆分，0.21.0 里这些模块还不存在。
+
+| 0.21.3 的文件 | 0.21.0 里的实际位置 | 涉及的补丁 |
+|---|---|---|
+| `tools/approval_context.py` | `tools/approval.py`（`_get_approval_mode` / `_normalize_approval_mode`） | C04 C05 |
+| `tools/approval_detection.py` | `tools/approval.py`（`detect_hardline_command` / `detect_dangerous_command`） | C11 C12 |
+| `_binary_approval_mode` | 无对应函数；语义拆成 `_is_cron_approval_context` / `_is_unattended_platform_approval_context` / `_is_single_query_approval_context`，三处恒 False | C06 |
+| `agent/turn_request_assembly.py` | `agent/conversation_loop.py`（prefill 循环还在原地） | C16 |
+| `agent/turn_context.py` 的系统提示词注入 | `agent/conversation_loop.py` + `agent/chat_completion_helpers.py`（缩进也不同：8 空格 vs 12 空格） | C13 C14 |
+| `agent/turn_stop_gates.py`（`apply_stop_gates`） | 无此模块。落点改到主循环「已拿到正文、还没 build assistant message」那一刻，用既有的 `nudge + continue` 惯用法 | C18 C18b C18c C18d |
+| `agent/stream_delivery.py` | `run_agent.py`（`_fire_stream_delta` / `_emit_stream_end` / `_record_streamed_assistant_text`） | C19b C19c C19d C19e |
+| `agent/transports/chat_completions.py::_base_kwargs` | 同文件 `_build_kwargs_from_profile`（温度分支在 830 行附近） | C20 C20b |
+
+两个和缩进有关的坑，都踩过了：
+
+1. **锚点必须带缩进**。`api_messages = [{"role": "system"...}]` 这行在 0.21.3 是 8 空格、0.21.0 是 12 空格。
+   不带缩进会「匹配成功但把缩进写错」，产出一个 `IndentationError` —— 比匹配不上更糟（`--status` 还显示成功）。
+   现在 C14 的主锚带 `\n` + 8 空格，12 空格走变体。
+2. **0.21.0 的拒答重采样落点在主循环里**，`continue` 之前必须 `final_response = None`；
+   相邻 user 行由 `_drop_thinking_only_and_merge_users` 在 `api_messages` 侧合并，角色交替不会被打破。
+
+验证方式（两个版本各跑一遍，命令在「自检」一节）：
+
+| 项 | 0.21.0（macOS，`~/.hermes/hermes-agent`） | 0.21.3/0.21.4（Windows 布局） |
+|---|---|---|
+| `--status` | applied 2 / pending 29 / drifted **0** / missing **0** | 同上，且 0 处使用变体 |
+| `--apply` | 改写 29 · 未命中 0；二次执行改写 0 · 跳过 31 | 改写 30 · 未命中 0 |
+| `py_compile` | 7 个文件全过 | 12 个文件全过 |
+| 运行时断言 | 8/8 绿（另加 `cron_ctx=False`） | 8/8 绿 |
+| 拒答重采样单测 | `test/c18_unit_0210.py` 15/15 | `test/c18_unit.py` 11/11 |
+| `--revert` | 11 个文件全部按字节还原，无 `.bak` 残留 | 同 |
 
 ## 六个有效杠杆（按贡献排序，都是实测出来的）
 
@@ -442,20 +569,32 @@ hermes-purge/
 
 ## 已知局限
 
-1. **锚点是版本敏感的。** 31 条补丁靠精确文本匹配定位，Hermes 升级后部分会 `drifted`。
-   `--status` 会显示，`--apply` 不会强行改。
+1. **锚点是版本敏感的。** v2 先用符号名定位（AST），找不到才退回文本锚点；
+   文本层仍然是精确匹配，上游改一个空格就 `drifted` —— `status` 会显示，`apply` 不会强行改。
 2. **探测只看聊天正文。** 见上文「聊天正文不等于实际产出」。
 3. **依赖模型的概率性行为。** 清洗器解决的是 harness 层（审批/黑名单/护栏/注入位置/token 预算），
    这一层是确定的。内容层的拒绝率是采样随机的，`--tries` 是工程收敛手段，不是保证。
-4. **Windows 优先。** `hp.cmd` 是 Windows 启动器；`lib/` 与 `bin/` 本身跨平台，
-   `resolveHermesRoot` 也覆盖了 Linux/macOS 常见路径，但只在 Windows 上完整实测过。
+4. **平台：macOS 与 Windows 都实测过**（0.21.0 在 macOS、0.21.3/0.21.4 在 Windows 布局；
+   CRLF 树做了闭环验证）。`hp.cmd` 只是 Windows 的启动器糖，`lib/`、`bin/` 跨平台。
+5. **shim 层有边界。** 它只能替换「模块属性」；函数内部直接调本地名（`def a(): return _b()`）
+   的情况替换无效，这类必须走 AST 层。`_YOLO_MODE_FROZEN` 这种 import 期就冻结的值只能靠
+   `.env` 的 `HERMES_YOLO_MODE=1` 提前注入。
+6. **结构性改动只有文本层。** 搬注入点（C13/C14）、改循环加 hook（C18 系列 / C19 系列）
+   在语义上没法用 AST/shim 表达 —— 我们如实标成 text-only，不吹「四层通用」。
+7. **L3 端到端默认不跑。** 它要真调一次模型（花钱、依赖网络），所以只在 `--level=3` 时触发。
 
 ---
 
 ## 致谢
 
-**思想来源：dsh-purge。** 「不跟模型讲道理，直接改宿主」这个方向、
-三层清洗的分层方式、以及「先量边界再谈效果」的方法论，都来自 dsh-purge。
+**借鉴自 dsh-purge 的三件事**（判断层面，不是代码层面）：
+
+1. 「不跟模型讲道理，直接改宿主」这个方向 —— 它把这个判断讲透了
+2. 分层清洗的切法：提示词 / 配置 / 代码，三层各有各的失效方式
+3. 「先量边界再谈效果」的方法论 —— 先跑数据知道哪些能做、哪些恒定做不到，再谈优化
+
+**没有沿用的**：它的插件形态、shim 注入实现、88 条补丁清单、CLI 与交互。
+本项目的补丁锚点、引擎、验证与观测都是按 Hermes Agent 的 Python 宿主重做的。
 
 **宿主：[Hermes Agent](https://github.com/NousResearch/hermes-agent)**，由 Nous Research
 以 MIT 许可发布。本仓库不包含它的任何源码，只在运行时改写调用方机器上的副本。

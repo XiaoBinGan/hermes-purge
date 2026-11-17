@@ -1,7 +1,7 @@
 {
   "name": "hermes-purge",
-  "version": "1.1.1",
-  "description": "Hermes Agent 三层清洗：提示词人格、config 审批策略、代码层审批门与黑名单。附破甲执行器与效力边界探针。",
+  "version": "2.0.0",
+  "description": "Hermes Agent 破甲：能力层（capability）引擎 —— AST / shim / 文本 / 配置四层落地，事务回滚 + 三级验证 + 观测。跨 macOS / Windows。",
   "license": "MIT",
   "author": "XiaoBinGan",
   "repository": {
@@ -22,7 +22,8 @@
   ],
   "bin": {
     "hermes-purge": "./bin/hermes-purge.js",
-    "hp": "./bin/hp.js"
+    "hp": "./bin/hp.js",
+    "purge": "./bin/purge.js"
   },
   "main": "./lib/core.js",
   "files": [
@@ -34,14 +35,16 @@
     "hp.cmd",
     "README.md",
     "CHANGELOG.md",
-    "LICENSE"
+    "LICENSE",
+    "docs/"
   ],
   "scripts": {
     "status": "node bin/hermes-purge.js --status",
     "apply": "node bin/hermes-purge.js --apply",
     "verify": "node bin/hermes-purge.js --verify",
     "revert": "node bin/hermes-purge.js --revert",
-    "test": "node test/smoke.js"
+    "test": "node test/smoke.js && node test/v2.js",
+    "v2": "node bin/purge.js"
   },
   "engines": {
     "node": ">=18"
