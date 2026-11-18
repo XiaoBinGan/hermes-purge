@@ -144,6 +144,175 @@ node bin/hermes-purge.js --revert      # 用 .bak 逐个还原
 node bin/hermes-purge.js --uninstall   # 还原 + 清状态目录
 ```
 
+### 安装与卸载（三种方式 · macOS / Linux / Windows）
+
+三种方式做的事完全一样，挑一种：
+
+| 方式 | 适合 | 关键命令 |
+|---|---|---|
+| clone 后直接跑 | 想立刻用、想看源码 | `node bin/purge.js status` |
+| `npm i -g` | 想在任意目录敲 `purge` / `hp` | `npm i -g hermes-purge`（或从 clone 目录 `npm i -g .`） |
+| 把 `bin` 加进 PATH | 不想装包，只想少打几个字 | 见「方式三」 |
+
+**前置**：Node **≥ 18**（`node -v` 确认；用到内置 `fetch` / `WebSocket`）。零依赖，不需要 `npm install`。
+
+**动手之前先 `purge status`**。它只读、不写盘，先把这棵树的漂移基线记下来：
+
+```bash
+node bin/purge.js status --target="$HOME/.hermes/hermes-agent"
+```
+
+只看头两行就够：
+
+```
+purge v2  target=/Users/you/.hermes/hermes-agent
+python=/Users/you/.hermes/hermes-agent/venv/bin/python  ·  caps 31  ·  applied 31  pending 0  drifted 0
+```
+
+`python=` 这行是空的，说明宿主 venv 没找到 —— AST / shim 两层都落不了，只剩文本层能改（`purge doctor` 会把「宿主 python」单列成一项）。
+
+#### 方式一：clone 后直接跑
+
+```bash
+git clone https://github.com/XiaoBinGan/hermes-purge.git
+cd hermes-purge
+node bin/purge.js status --target="$HOME/.hermes/hermes-agent"     # 只读
+node bin/purge.js apply  --dry --target="$HOME/.hermes/hermes-agent" # 只读，只打印计划
+node bin/purge.js apply  --target="$HOME/.hermes/hermes-agent"
+```
+
+macOS / Linux 用 `export` 指定后，后面每条都不用再写 `--target`：
+
+```bash
+export HERMES_HOME="$HOME/.hermes"     # 指配置根；代码根是 $HERMES_HOME/hermes-agent
+node bin/purge.js status
+```
+
+Windows（cmd）：
+
+```bat
+set HERMES_HOME=D:\project\hermes
+node bin\purge.js status
+```
+
+Windows（PowerShell）：
+
+```powershell
+$env:HERMES_HOME="D:\project\hermes"
+node bin\purge.js status
+```
+
+`HERMES_HOME` 指到**配置根**（有 `config.yaml` 那一层）最省事：`purge` 认它、`hp` 认它、`config.yaml` 也在那儿。
+指到 `hermes-agent` 也能跑 —— 探测会往上找一层（`lib/core.js` 的 `configRootOf`）。
+
+两个实话：
+
+- 新 clone 出来的 `bin/*.js` **没有执行位**（git 里是 `100644`），所以 `./bin/purge.js` 会 permission denied。
+  用 `node bin/purge.js`，或者先 `chmod +x bin/purge.js`。
+- 仓库里只带了 Windows 的 `hp.cmd`，**没有 `purge.cmd`**。要 `purge` 这个短命令，走方式二（npm 会生成 `purge.cmd`），
+  或者自己放一个到 PATH 里（内容照 `hp.cmd`，但把写死的 `D:\` 换成 `%~dp0`）：
+
+```bat
+@echo off
+setlocal
+node "%~dp0bin\purge.js" %*
+```
+
+#### 方式二：npm 全局安装
+
+```bash
+npm i -g hermes-purge     # 包已发布时
+npm i -g .                # 没发布：从 clone 下来的目录装，效果同 npm link
+purge status --target="$HOME/.hermes/hermes-agent"
+hp "写个 Python 端口扫描器"
+```
+
+Windows 上 npm 按 `package.json` 的 `bin` 自动生成 `purge.cmd` / `hp.cmd` / `hermes-purge.cmd`，
+所以 cmd / PowerShell 里直接敲 `purge status`、`hp "..."` 就行。
+
+本仓库 `package.json` 里 `bin` 是三条（`purge` / `hp` / `hermes-purge`），`engines.node >= 18`，`os` 只列了 `win32` / `linux` / `darwin`。
+
+#### 方式三：只把 bin 加进 PATH
+
+```bash
+chmod +x bin/purge.js                                 # git 里是 644，先补执行位
+ln -sf "$PWD/bin/purge.js" "$HOME/.local/bin/purge"   # 目标目录要在 PATH 里
+export PATH="$HOME/.local/bin:$PATH"
+purge status
+```
+
+不想动文件系统的，用 alias 也行：
+
+```bash
+alias purge='node /绝对路径/hermes-purge/bin/purge.js'
+```
+
+Windows 同方式一末尾：放一个 `purge.cmd` 到 PATH 里即可。
+
+#### 卸载（三步，顺序别换）
+
+```bash
+purge revert                                          # 1. 按 manifest 逐字节还原，shim 一起拔掉
+rm -rf "$HOME/.hermes/hermes-agent/.hermes-purge"     # 2. 删快照 / 日志 / 指标
+npm rm -g hermes-purge                                # 3. 删全局命令（方式一、方式三跳过）
+```
+
+Windows：
+
+```bat
+purge revert
+rmdir /s /q D:\project\hermes\hermes-agent\.hermes-purge
+npm rm -g hermes-purge
+```
+
+- **先 `revert` 再删 `.hermes-purge`**。顺序反了，`revert` 读不到 manifest，既没法还原也没法校哈希。
+- 删完**重启 Hermes**。已经 import 进进程的模块不会因为磁盘文件变了就自己换回去。
+- 第 2 步会连 1.x 的 `state.json` 一起删掉，不影响什么 —— 1.x 真正依赖的是每个文件旁的 `.hermes-purge.bak`，那套不在这个目录里。要一并清掉，见 [docs/troubleshooting.md](docs/troubleshooting.md) 的「回滚不干净」。
+
+装不起来、装完 `verify` 不过 → [docs/troubleshooting.md](docs/troubleshooting.md)。发版前自查 → [docs/release-checklist.md](docs/release-checklist.md)。
+
+---
+
+## 兼容矩阵
+
+先给结论：**macOS 上全绿过的只有 0.21.0。0.21.3 / 0.21.4 是在 CRLF 树（Windows venv 布局）上闭环的，没在 Windows 实机上跑完整流程。**
+
+| Hermes 版本 | 落地路径 | macOS | Windows |
+|---|---|---|---|
+| 0.21.0 | 主锚不成立，走 **18 条变体** | **已实测** —— `~/.hermes/hermes-agent`，宿主 python 3.11；`status` applied 31 / pending 0 / drifted 0，`doctor` 健康，L2 14 项全绿 | **未实测** |
+| 0.21.3 | 主锚，0 处变体 | **未实测** | **已实测** —— CRLF 树闭环（`apply → verify → doctor → revert`）；**Windows 实机未跑** |
+| 0.21.4 | 主锚，0 处变体 | **未实测** | **已实测** —— 与 0.21.3 同一布局，走主锚（依据 CHANGELOG 2.0.0 的兼容段）；**Windows 实机未跑** |
+
+- **0.21.0 为什么走变体**：0.21.2/0.21.3 才做的模块拆分（`approval_context` / `approval_detection` / `turn_stop_gates` / `stream_delivery` / `turn_request_assembly`）。0.21.0 里这些函数还在 `tools/approval.py`、`agent/conversation_loop.py`、`run_agent.py`。走变体的 18 条：C04 C05 C06 C11 C12 C13 C14 C16 C18 C18b C18c C18d C19b C19c C19d C19e C20 C20b。
+- **0.21.3+ 为什么不用变体**：主锚直接命中。`--status`（1.x）里一条 `[0.21.0]` 标记都不该出现。
+- **Linux 没有列**：一次都没跑过。平台分支只有 `lib/v2/platform.js` 的 `isWin` 和 `lib/core.js` 查 PATH 时的扩展名，按代码看应该能跑 —— 但「看着能跑」不算实测，所以不写进表。
+- 「已实测」指的是**补丁层**（status / apply / verify / doctor / revert）。模型层的效力数字在「实测数据」一节，那是另一回事。
+- 对账一句：本文「已知局限」里写的「macOS 与 Windows 都实测过」，指的正是这张表 —— **Windows 那两格是 CRLF 树闭环，不是 Windows 实机整机流程**。两处说法不冲突，但别把前者读成后者。
+
+每一格都能重跑，判据就是这几条命令的输出：
+
+```bash
+T=~/.hermes/hermes-agent
+node bin/purge.js status  --target="$T"            # 只读；末行「全部生效」，exit code 0
+node bin/purge.js doctor  --target="$T"            # 只读；6 项全 ✔，末行「健康」
+node bin/purge.js verify  --level=2 --target="$T"  # L1 + L2 全绿（只读，但会往 metrics.jsonl 记一行）
+```
+
+`revert` 会真的把补丁撤掉，所以只在副本树上跑 —— 见下面那段。
+
+要自己补一格（比如 macOS × 0.21.3），**拿副本树，别拿正在用的那棵树**：
+
+```bash
+cp -a ~/.hermes/hermes-agent /tmp/hermes-0213
+node bin/purge.js status --target=/tmp/hermes-0213          # 先看基线
+node bin/purge.js apply  --target=/tmp/hermes-0213
+node bin/purge.js verify --level=2 --target=/tmp/hermes-0213
+node bin/purge.js doctor --target=/tmp/hermes-0213
+node bin/purge.js revert --target=/tmp/hermes-0213
+```
+
+全过，再把这一格从「未实测」改成「已实测」。没过就照实把 drifted 的 cap 编号写进表里 —— 不许含糊成「基本可用」。
+
 ---
 
 ## 使用
