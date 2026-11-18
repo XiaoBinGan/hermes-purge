@@ -295,7 +295,7 @@ stub provider 是关键：**不花 token、不依赖网络**，就能断言「�
 | **P1** | AST 层 + 能力 DSL（31 条 cap 化，AST 优先、文本兜底） | `anchor.js` `impl/ast.js`；0.21.0/0.21.3 双版本一次性通过 | 1d |
 | **P2** | shim 层 + 热生效 | `impl/shim.js` + `sitecustomize` 生成器；`apply --hot` | 1d |
 | **P3** | 三级验证 + stub provider | `verify.js` + `bench/stub_provider.py`；E2E 3 用例 | 1d |
-| **P4** | metrics + `hp stats` + 漂移告警 | `metrics.js` | 0.5d |
+| **P4** ✅ | 每轮埋点：shim turn 钩子 + `purge stats` 聚合（轮次/拒答/重采样/tokens/cap 命中/成本） | `lib/v2/shim.js` turn hook + `metrics.js` + `purge stats` | 0.5d |
 | **P5** | bench 升级（CI/成本/decoy/磁盘断言） | `bench/*` | 1d |
 | **P6** | dsh adapter（88 → ~40 cap） | `adapters/dsh` | 1.5d |
 
@@ -310,6 +310,20 @@ stub provider 是关键：**不花 token、不依赖网络**，就能断言「�
 - P6：同一份 engine 在 DSH 上跑通 ≥85/88
 
 ---
+
+## 11.1 实施现状（2026-11-18）
+
+| 阶段 | 状态 | 证据 |
+|---|---|---|
+| P0 事务 + doctor + 行首锚点 | ✅ | `txn.js`；`doctor` 六项全绿；`test/v2.js` 事务用例 |
+| P1 AST 层 + cap 化 | ✅ | 31/31 在 0.21.0 / 0.21.4 两套布局；安全核心 C01–C12 有 AST 路径 |
+| P1.5 shim 层（热生效地基） | ✅ | pristine 树只装 shim 已生效；`_hermes_purge.pth` + 钩子 |
+| P2 三级验证 | ✅ | L1 9 / L2 14 / L3 真跑；`purge verify --level=3` |
+| P3 事务回滚（撤销栈） | ✅ | 双哈希 + 漂移拒绝 + `seq` 排序；revert 后逐字节一致 |
+| P4 每轮埋点 + stats | ✅ | `metrics.jsonl` 有真实轮次记录；真机一轮：tokens 20,478/218、cap 命中可见 |
+| P5 bench 升级（CI/成本/decoy） | ⬜ 未做 | —— |
+| P6 dsh adapter（跨宿主） | 🚧 进行中 | 分支 `feat/dsh` |
+| P7 npm 打包 / 文档 | ✅ | `test/package.js` 16 项（真打包真解包）；README 安装/兼容矩阵；`docs/troubleshooting.md` |
 
 ## 12. 风险与边界（写在前面，别到时候装死）
 

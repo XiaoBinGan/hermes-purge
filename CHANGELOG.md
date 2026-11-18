@@ -1,29 +1,60 @@
 # Changelog
 
-## 未发布 —— 每轮埋点（P4 观测轴）
+## 2.1.0 —— adapter 层（引擎与宿主解耦）+ DSH adapter
 
-`purge stats` 以前是空壳：只有 apply/verify 事件，对话轮没有埋点，所以 cap 命中 `{}`、
-拒答收敛 0。现在观测面有真数据。
+把「Hermes 专用引擎」拆成「宿主无关引擎 + 可插 adapter」：引擎只认四件事
+（cap 清单 / 实现分发 / shim 注入 / 验证），宿主差异全部收进 `adapters/<name>/`。
+新增第二个 adapter：DeepSeek Harness（DSH）。**注意：DSH adapter 只有规格与结构验证，
+没在真机 DSH 上跑过**（本机无安装），见下。
 
 ### 新增
 
-- **shim turn 钩子**（`lib/v2/shim.js`）：`agent.conversation_loop` 一被导入就用 meta_path
-  钩子包住 `run_conversation`，每轮结束往 `<宿主>/.hermes-purge/v2/metrics.jsonl` 追加一条：
+- `lib/v2/adapters.js`：adapter 注册表。`detect(target)` 按目录特征认宿主
+  （`hermes_cli/`+`agent/` → hermes；`cordis.patch.yml` 或 `plugins/`+`package.json` 含 dsh → dsh），
+  认不出时 CLI 报错并给 `--adapter` 提示，库调用落回 hermes（1.x 兼容）
+- `adapters/hermes/`：原 `lib/v2/caps.js` 的 31 条 cap **逐字照搬**（锚点、AST、shim 元数据都没动），
+  加上 Python AST / site-packages shim / L1-L3 验证的宿主适配层
+- `adapters/dsh/`：40 条 cap（由 dsh-purge 的 88 条按**行为**收敛）：
+  approval 10 · guardrail 9 · prompt 8 · config 8 · shim 5；每条约 1–2 条可执行断言
+- `lib/v2/conf.js`：配置层 `conf` kind —— `yamlEntry`（cordis.patch.yml 条目按 key 合并、保留其它键）、
+  `yamlTop`、`jsonSet`、`jsonAppend`、`fileWrite`；支持一次写同构多文件（web/desktop 两个 profile）
+- `lib/v2/shim-node.js`：Node 宿主 shim —— 写 `plugins/dsh-purge/shim/preload.js`（`Module._load` 钩子
+  换模块导出）+ 往 `config/launch-env.json` 的 `NODE_OPTIONS` 接 `--require`
+- `test/dsh.js`（33 项）+ `test/dsh-fixture.js`：自造 dsh 0.2 布局夹具树（不进仓库），
+  验证探测三态、conf/text/shim 落盘、`--adapter` 选择、断言层、revert 逐字节还原（哈希比对）
+- `bin/purge.js` 新增 `--adapter=hermes|dsh|auto`（缺省 auto）；`status/apply/verify/revert/doctor`
+  全部按 adapter 分发；`doctor` 不再对 DSH 套用 python / site-packages 检查
+- `txn.doctor(target, { skip, extra })`：adapter 可以剔除不适用的检查项（默认不传 = 原行为）
+
+### 未验证（如实写）
+
+- **DSH adapter 没在真机跑过。** 无 0.2 安装，验的是结构：夹具树上探测/落盘/回滚/断言。
+  未验：DSH 是否真读这些 `cordis.patch.yml` 条目、启动器是否透传 `NODE_OPTIONS`、
+  `Module._load` 钩子是否拦得到那些模块。`purge verify --level=3 --adapter=dsh`
+  会**如实报「未在真机跑过」并退出 1**，不假装通过
+- DSH 的 L1 只做 `node --check` / JSON.parse / YAML 结构检查（零依赖，不做完整 YAML 解析）
+
+### 兼容
+
+- `lib/v2/caps.js` 仍是门面：`buildCaps()`（无参）= hermes 31 条，`filesOf / shimEntriesFor /
+  CAP_NAME / AST_CORE / SHIM_CORE` 原样转发
+- `bin/hermes-purge.js`（1.x 引擎）未改动
+- Hermes 路径回归：真机 `status` 输出与原版**逐字节一致**（31/31 applied）；
+  临时 pristine 树 `apply → verify --level=2 → revert` 输出与改前逐字节一致
+
+### 观测（每轮埋点，P4）
+
+`purge stats` 以前是空壳（只有 apply/verify 事件，对话轮没有埋点），现在有真数据：
+
+- **shim turn 钩子**（`lib/v2/shim.js`）：`agent.conversation_loop` 一被导入就用 meta_path 钩子包住
+  `run_conversation`，每轮结束往 `<宿主>/.hermes-purge/v2/metrics.jsonl` 追加一行：
   `ts / surface / model / turn / refusals{nudges,hit} / approval{mode} / tokens{in,out} / ok / ms`。
-  全程 fail-open：任何取值/import/写盘异常都吞掉，宿主函数的异常照原样往外抛（不吞）。
-- **stats 聚合**（`lib/v2/metrics.js`）：轮次总数、拒答命中数与占比、平均每轮重采样、
-  按 cap 命中（读 `shim.log` 的 `{"cap":...}` 行）、tokens 合计、成本估算（内置默认价目表，
-  `stats(target, {prices})` 可覆盖）。拿不到的字段一律 `null`，不给 0 假装有数据。
-- `test/v2.js` 新增 8 项：假 agent 跑 wrapper 断言记录字段、宿主抛异常仍记 `ok:false` 且不吞、
-  `_purge_refusal_nudges` 缺失时安全读成 null、stats 计数、cap 只数带标签的行、成本可覆盖与
-  未定价 `null`、空树诚实、shim 模板仍是合法 python（`PY` 环境变量或 `which python3` 兜底）。
+  全程 fail-open：取值 / import / 写盘异常一律吞掉，宿主函数的异常照原样往外抛（不吞）。
+- **stats 聚合**（`lib/v2/metrics.js`）：轮次总数、拒答命中率、平均每轮重采样、cap 命中（读 shim.log）、
+  tokens 合计、成本估算（`stats(target,{prices})` 可覆盖；未定价显示 `n/a`，不编数）。
+- `purge stats --json` 可机读；测试用 `-S` + 按路径装载 shim，避免把真机那份 shim 拉进单测。
 
-### 变更
 
-- `purge stats` 输出重写：没轮次数据时明确写「还没有轮次数据（跑一轮 hp 或 dashboard 会话后再看）」；
-  新增 `--json`。
-- 测试里用 `-S` + 按文件路径装载 shim：即使 `PY` 指向本机已装的 Hermes venv，也不会把
-  真机那份 shim 拉进来、不会污染真实 `.hermes-purge` 日志。
 
 ## 2.0.0 —— capability layer（能力层）
 
