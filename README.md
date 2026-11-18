@@ -327,7 +327,7 @@ node bin/purge.js apply           # 事务式应用：快照 → 写 → L1 校�
 node bin/purge.js verify          # L1 静态 + L2 行为断言（默认）/ --level=3 端到端
 node bin/purge.js doctor          # 哈希漂移 / 临时文件 / shim 一致性
 node bin/purge.js revert          # 按 manifest 逐字节还原（手改过就拒绝覆盖）
-node bin/purge.js stats           # cap 命中、impl 分布、拒答收敛、成本
+node bin/purge.js stats           # 轮次 / 拒答收敛 / 重采样均值 / cap 命中 / tokens 成本（--json 可机读）
 ```
 
 **为什么 shim 层值得存在**：在一棵**完全未修改**的 Hermes 树上只装 shim，运行时就已经是
@@ -362,7 +362,7 @@ Windows 语义下的三个必踩坑，都已用 CRLF 树实测修掉：
 | 源码改不动时 | 依赖自身插件生命周期 | **pristine 树只装 shim**，源码一字节未改，运行时已是 `_YOLO_MODE_FROZEN=True` / `detect_hardline_command()=(False,'')` | 按 README「v2」一节复现 |
 | 回滚 | 单份 `.bak`，二次 apply 覆盖原始备份 | 快照多版本 + before/after **双哈希** + 手改拒绝覆盖 + 撤销栈（LIFO） | `test/v2.js` 里有对应用例 |
 | 生效证明 | 重启后目视 | L1 `py_compile`/YAML → L2 **14 条行为断言** → L3 端到端 | `purge verify --level=2` |
-| 观测 | 无 | `metrics.jsonl` + `purge stats`：cap 命中、impl 分布、拒答收敛、成本 | `purge stats` |
+| 观测 | 无 | `metrics.jsonl` + `purge stats`：轮次 / 拒答收敛 / 重采样均值 / cap 命中 / tokens 成本（shim 的 turn 钩子每轮写一条） | `purge stats` |
 | 平台 | 未注明 | macOS + Windows 都实测；CRLF 三个坑（AST 插行写坏文件、锚点 LF 匹配不上、venv 双布局）已修并由 CRLF 树闭环验证 | `test/v2.js --e2e <CRLF 树>` |
 | 宿主绑定 | 绑死 DSH | cap 只描述**行为**，落地层不认识宿主（跨宿主 adapter 的地基） | `lib/v2/caps.js` |
 | 规模思路 | 88 条 patch（同一行为常有多种表述） | 按**行为**聚合成 31 条 cap，每条带断言；不做条数竞赛 | `purge status` 的 `cap` 列 |

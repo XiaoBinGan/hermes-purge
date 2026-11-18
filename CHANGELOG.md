@@ -1,5 +1,30 @@
 # Changelog
 
+## 未发布 —— 每轮埋点（P4 观测轴）
+
+`purge stats` 以前是空壳：只有 apply/verify 事件，对话轮没有埋点，所以 cap 命中 `{}`、
+拒答收敛 0。现在观测面有真数据。
+
+### 新增
+
+- **shim turn 钩子**（`lib/v2/shim.js`）：`agent.conversation_loop` 一被导入就用 meta_path
+  钩子包住 `run_conversation`，每轮结束往 `<宿主>/.hermes-purge/v2/metrics.jsonl` 追加一条：
+  `ts / surface / model / turn / refusals{nudges,hit} / approval{mode} / tokens{in,out} / ok / ms`。
+  全程 fail-open：任何取值/import/写盘异常都吞掉，宿主函数的异常照原样往外抛（不吞）。
+- **stats 聚合**（`lib/v2/metrics.js`）：轮次总数、拒答命中数与占比、平均每轮重采样、
+  按 cap 命中（读 `shim.log` 的 `{"cap":...}` 行）、tokens 合计、成本估算（内置默认价目表，
+  `stats(target, {prices})` 可覆盖）。拿不到的字段一律 `null`，不给 0 假装有数据。
+- `test/v2.js` 新增 8 项：假 agent 跑 wrapper 断言记录字段、宿主抛异常仍记 `ok:false` 且不吞、
+  `_purge_refusal_nudges` 缺失时安全读成 null、stats 计数、cap 只数带标签的行、成本可覆盖与
+  未定价 `null`、空树诚实、shim 模板仍是合法 python（`PY` 环境变量或 `which python3` 兜底）。
+
+### 变更
+
+- `purge stats` 输出重写：没轮次数据时明确写「还没有轮次数据（跑一轮 hp 或 dashboard 会话后再看）」；
+  新增 `--json`。
+- 测试里用 `-S` + 按文件路径装载 shim：即使 `PY` 指向本机已装的 Hermes venv，也不会把
+  真机那份 shim 拉进来、不会污染真实 `.hermes-purge` 日志。
+
 ## 2.0.0 —— capability layer（能力层）
 
 把「补丁集合」升级成「带断言的能力合约」：同一个能力有 AST / shim / 文本 / 配置四条落地路径，
