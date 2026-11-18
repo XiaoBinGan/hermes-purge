@@ -322,7 +322,7 @@ stub provider 是关键：**不花 token、不依赖网络**，就能断言「�
 | P3 事务回滚（撤销栈） | ✅ | 双哈希 + 漂移拒绝 + `seq` 排序；revert 后逐字节一致 |
 | P4 每轮埋点 + stats | ✅ | `metrics.jsonl` 有真实轮次记录；真机一轮：tokens 20,478/218、cap 命中可见 |
 | P5 bench 升级（CI/成本/decoy） | ⬜ 未做 | —— |
-| P6 dsh adapter（跨宿主） | 🚧 进行中 | 分支 `feat/dsh` |
+| P6 dsh adapter（跨宿主） | 🟡 规格 + 夹具验证 | `adapters/dsh` 40 条 cap（D01–D40）；`test/dsh.js` 33 项；探测/conf/text/shim/revert 全验；**真机 DSH 未验**，`verify --level=3 --adapter=dsh` 如实退出 1 |
 | P7 npm 打包 / 文档 | ✅ | `test/package.js` 16 项（真打包真解包）；README 安装/兼容矩阵；`docs/troubleshooting.md` |
 
 ## 12. 风险与边界（写在前面，别到时候装死）
