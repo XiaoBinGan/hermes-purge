@@ -328,6 +328,9 @@ node bin/purge.js verify          # L1 静态 + L2 行为断言（默认）/ --l
 node bin/purge.js doctor          # 哈希漂移 / 临时文件 / shim 一致性
 node bin/purge.js revert          # 按 manifest 逐字节还原（手改过就拒绝覆盖）
 node bin/purge.js stats           # cap 命中、impl 分布、拒答收敛、成本
+
+# 宿主解耦后：同一套命令，换 adapter 就能跑另一个宿主
+node bin/purge.js status --adapter=dsh --target=/path/to/dsh-home
 ```
 
 **为什么 shim 层值得存在**：在一棵**完全未修改**的 Hermes 树上只装 shim，运行时就已经是
@@ -341,6 +344,51 @@ node bin/purge.js stats           # cap 命中、impl 分布、拒答收敛、�
 revert 前先验证「当前文件 == 我上次写完的样子」，用户手改过就拒绝覆盖（`--force` 才强上）；
 支持按 id 撤到任意历史快照（撤销栈，LIFO）。
 
+## v2.1：adapter 层（引擎与宿主解耦）
+
+v2 只有 Hermes 一个宿主，cap 清单还硬写在 `lib/v2/caps.js` 里。v2.1 把宿主差异整体挪到
+`adapters/<name>/`，引擎只认四个动作：**cap 清单 / 实现分发 / shim 注入 / 验证**。
+
+```
+lib/v2/adapters.js     注册表：detect(target) + get(id) + resolve({name,target})
+lib/v2/caps.js         门面：buildCaps({adapter,target})，缺省探测、探测不到落回 hermes
+lib/v2/impls.js        文本层（宿主无关，两个 adapter 共用）
+lib/v2/conf.js         配置层 conf kind：yamlEntry / yamlTop / jsonSet / jsonAppend / fileWrite
+lib/v2/shim-node.js    Node 宿主 shim：NODE_OPTIONS=--require 预加载 + 模块导出替换
+adapters/hermes/       31 条 cap（原封不动）+ Python AST / site-packages shim / L1-L3
+adapters/dsh/          40 条 cap + conf/text/shim + node --check / 断言 L2
+```
+
+探测规则：
+
+| adapter | 认什么 |
+|---|---|
+| `hermes` | 目标里有 `hermes_cli/` 且 `agent/` |
+| `dsh` | 目标里有 `cordis.patch.yml`，或 `plugins/` + `package.json` 里出现 dsh |
+
+`--adapter=hermes|dsh|auto`（缺省 auto）。`auto` 认不出来时 CLI 直接报错并给提示；
+库调用 `buildCaps({target})` 认不出来则落回 hermes —— 1.x 与老测试的调用方行为不变。
+
+### DSH adapter 的 88 → 40
+
+dsh-purge 的 88 条 patch 是按「文件 + 锚点」平铺的，这里按**行为**收敛：
+
+| 组 | 条数 | 例子 |
+|---|---|---|
+| `approval` 审批/确认 | 10 | 审批模式恒 off、审批钩子直接放行、编辑确认跳过、危险命令探测失效 |
+| `guardrail` 护栏 | 9 | 循环/停手护栏放行、工具白名单放行、重复提醒关、沙箱策略放行 |
+| `prompt` 提示词 | 8 | postPrompt 注入、段位置调整、persona 覆盖、附加指令段 |
+| `config` 配置 | 8 | web/desktop 两个 profile 写入、patchReload: live、模型/温度/token |
+| `shim` 预加载 | 5 | NODE_OPTIONS=--require 注入、override 清单、三个模块导出替换 |
+
+每条 cap 带断言，L2 直接跑（`node` 读目标树，`ok/ detail` 结构化返回）。
+
+> ⚠️ **DSH adapter 目前是「规格 + 结构验证」，没有在真机 DSH 上跑过。**
+> 本机没有 DSH 安装，`test/dsh.js` 在一棵自造的夹具树上验证的是：探测、conf/text/shim
+> 三类真的落盘、`--adapter` 选择、事务回滚逐字节还原、断言层能跑。
+> **没有验证的是**：DSH 0.2 是否真的读这些配置 / 换这些模块导出 / 在启动器里透传
+> `NODE_OPTIONS`。`purge verify --level=3` 在 dsh 上会**如实报「未在真机跑过」并退出 1**。
+
 ### 跨平台（macOS + Windows）
 
 Windows 语义下的三个必踩坑，都已用 CRLF 树实测修掉：
@@ -352,8 +400,9 @@ Windows 语义下的三个必踩坑，都已用 CRLF 树实测修掉：
 
 ## 我们比 dsh-purge 强在哪
 
-先划清一件事：**它跑 DSH，我们跑 Hermes**，不是同一个宿主上的竞品。这份对照是给我们自己的
-取舍做记录 —— 哪些地方它的做法值得抄、哪些地方它留了坑、我们补了什么。每条都能在本仓库跑出来。
+先划清一件事：它的宿主是 DSH，我们的原生宿主是 Hermes —— v2.1 起我们也有 **DSH adapter**，
+但那只是「同一个引擎的第二个宿主」，还没在真机上验证过（它跑了很久）。这份对照是给我们自己的
+取舍做记录 —— 哪些地方它的做法值得抄、哪些地方它留了坑、我们补了什么。Hermes 那几行都能在本仓库跑出来。
 
 | 维度 | dsh-purge 1.1.71 | 本项目 2.0 | 怎么验 |
 |---|---|---|---|
@@ -364,8 +413,8 @@ Windows 语义下的三个必踩坑，都已用 CRLF 树实测修掉：
 | 生效证明 | 重启后目视 | L1 `py_compile`/YAML → L2 **14 条行为断言** → L3 端到端 | `purge verify --level=2` |
 | 观测 | 无 | `metrics.jsonl` + `purge stats`：cap 命中、impl 分布、拒答收敛、成本 | `purge stats` |
 | 平台 | 未注明 | macOS + Windows 都实测；CRLF 三个坑（AST 插行写坏文件、锚点 LF 匹配不上、venv 双布局）已修并由 CRLF 树闭环验证 | `test/v2.js --e2e <CRLF 树>` |
-| 宿主绑定 | 绑死 DSH | cap 只描述**行为**，落地层不认识宿主（跨宿主 adapter 的地基） | `lib/v2/caps.js` |
-| 规模思路 | 88 条 patch（同一行为常有多种表述） | 按**行为**聚合成 31 条 cap，每条带断言；不做条数竞赛 | `purge status` 的 `cap` 列 |
+| 宿主绑定 | 绑死 DSH | **adapter 注册表**：cap 只描述行为，落地层不认识宿主；Hermes（实测）+ DSH（规格验证）两个 adapter 并存 | `lib/v2/adapters.js` |
+| 规模思路 | 88 条 patch（同一行为常有多种表述） | Hermes 31 条 cap、DSH 40 条 cap（由 88 条按行为收敛），每条带断言；不做条数竞赛 | `purge status` 的 `cap` 列 |
 
 ### 三条我们刻意做得比它狠的
 
@@ -547,12 +596,18 @@ hermes-purge/
 │   └── rescore.js             样本重评
 ├── lib/
 │   ├── core.js                共享内核：判定 / 推断 / 预填充 / 路径解析
-│   └── channels.js            共享通道：api / dashboard / hermes-bin
+│   ├── channels.js            共享通道：api / dashboard / hermes-bin
+│   └── v2/                    v2 引擎（宿主无关）：caps 门面 / txn / impls / conf / shim-node
+├── adapters/
+│   ├── hermes/                Hermes adapter：caps 清单 + AST/site-packages shim + L1-L3
+│   └── dsh/                   DSH adapter：40 条 cap + conf/text/预加载 shim（未真机验证）
 ├── payload/
 │   ├── SOUL.md                人格 payload（v2）
 │   └── prefill_messages.json  prefill 引导
 ├── test/
 │   ├── smoke.js               41 项静态自检（不联网、不改文件）
+│   ├── v2.js                  22 项引擎单元（cap 清单 / 事务 / AST / shim 模板）
+│   ├── dsh.js                 33 项 DSH adapter 结构验证 + dsh-fixture.js 夹具树
 │   ├── c18_unit.py            13 项 C18 单元断言（含按轮重置）
 │   ├── win.ps1                桌面窗口 list/focus/rect/shot
 │   └── drive.ps1              往桌面窗口里打字并截图
@@ -582,6 +637,9 @@ hermes-purge/
 6. **结构性改动只有文本层。** 搬注入点（C13/C14）、改循环加 hook（C18 系列 / C19 系列）
    在语义上没法用 AST/shim 表达 —— 我们如实标成 text-only，不吹「四层通用」。
 7. **L3 端到端默认不跑。** 它要真调一次模型（花钱、依赖网络），所以只在 `--level=3` 时触发。
+8. **DSH adapter 没在真机验证。** 只有规格 + 结构验证（自造夹具树 + `test/dsh.js`）。
+   真机要验的是：DSH 0.2 是否读 `cordis.patch.yml` 的这些条目、启动器是否透传
+   `NODE_OPTIONS`、`Module._load` 钩子是否拦得到那些模块。`verify --level=3` 会直接报未验证。
 
 ---
 

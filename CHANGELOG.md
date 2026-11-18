@@ -1,5 +1,47 @@
 # Changelog
 
+## 2.1.0 —— adapter 层（引擎与宿主解耦）+ DSH adapter
+
+把「Hermes 专用引擎」拆成「宿主无关引擎 + 可插 adapter」：引擎只认四件事
+（cap 清单 / 实现分发 / shim 注入 / 验证），宿主差异全部收进 `adapters/<name>/`。
+新增第二个 adapter：DeepSeek Harness（DSH）。**注意：DSH adapter 只有规格与结构验证，
+没在真机 DSH 上跑过**（本机无安装），见下。
+
+### 新增
+
+- `lib/v2/adapters.js`：adapter 注册表。`detect(target)` 按目录特征认宿主
+  （`hermes_cli/`+`agent/` → hermes；`cordis.patch.yml` 或 `plugins/`+`package.json` 含 dsh → dsh），
+  认不出时 CLI 报错并给 `--adapter` 提示，库调用落回 hermes（1.x 兼容）
+- `adapters/hermes/`：原 `lib/v2/caps.js` 的 31 条 cap **逐字照搬**（锚点、AST、shim 元数据都没动），
+  加上 Python AST / site-packages shim / L1-L3 验证的宿主适配层
+- `adapters/dsh/`：40 条 cap（由 dsh-purge 的 88 条按**行为**收敛）：
+  approval 10 · guardrail 9 · prompt 8 · config 8 · shim 5；每条约 1–2 条可执行断言
+- `lib/v2/conf.js`：配置层 `conf` kind —— `yamlEntry`（cordis.patch.yml 条目按 key 合并、保留其它键）、
+  `yamlTop`、`jsonSet`、`jsonAppend`、`fileWrite`；支持一次写同构多文件（web/desktop 两个 profile）
+- `lib/v2/shim-node.js`：Node 宿主 shim —— 写 `plugins/dsh-purge/shim/preload.js`（`Module._load` 钩子
+  换模块导出）+ 往 `config/launch-env.json` 的 `NODE_OPTIONS` 接 `--require`
+- `test/dsh.js`（33 项）+ `test/dsh-fixture.js`：自造 dsh 0.2 布局夹具树（不进仓库），
+  验证探测三态、conf/text/shim 落盘、`--adapter` 选择、断言层、revert 逐字节还原（哈希比对）
+- `bin/purge.js` 新增 `--adapter=hermes|dsh|auto`（缺省 auto）；`status/apply/verify/revert/doctor`
+  全部按 adapter 分发；`doctor` 不再对 DSH 套用 python / site-packages 检查
+- `txn.doctor(target, { skip, extra })`：adapter 可以剔除不适用的检查项（默认不传 = 原行为）
+
+### 未验证（如实写）
+
+- **DSH adapter 没在真机跑过。** 无 0.2 安装，验的是结构：夹具树上探测/落盘/回滚/断言。
+  未验：DSH 是否真读这些 `cordis.patch.yml` 条目、启动器是否透传 `NODE_OPTIONS`、
+  `Module._load` 钩子是否拦得到那些模块。`purge verify --level=3 --adapter=dsh`
+  会**如实报「未在真机跑过」并退出 1**，不假装通过
+- DSH 的 L1 只做 `node --check` / JSON.parse / YAML 结构检查（零依赖，不做完整 YAML 解析）
+
+### 兼容
+
+- `lib/v2/caps.js` 仍是门面：`buildCaps()`（无参）= hermes 31 条，`filesOf / shimEntriesFor /
+  CAP_NAME / AST_CORE / SHIM_CORE` 原样转发
+- `bin/hermes-purge.js`（1.x 引擎）未改动
+- Hermes 路径回归：真机 `status` 输出与原版**逐字节一致**（31/31 applied）；
+  临时 pristine 树 `apply → verify --level=2 → revert` 输出与改前逐字节一致
+
 ## 2.0.0 —— capability layer（能力层）
 
 把「补丁集合」升级成「带断言的能力合约」：同一个能力有 AST / shim / 文本 / 配置四条落地路径，
