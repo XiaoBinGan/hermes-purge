@@ -1,5 +1,27 @@
 # Changelog
 
+## 2.2.0 —— 安装/卸载路径（一条命令）
+
+之前要 `git clone` + 记 `node bin/purge.js <子命令>`，实际用起来太啰嗦。
+
+### 新增
+
+- **`purge setup`**：检测宿主 → 打印计划（宿主/目录/cap 统计/按实现层分布/不可用项）→
+  交互确认 → apply → verify L2 → 打印重启、仪表盘、回滚命令。`--dry` 只读，
+  `--yes` 非交互，`--adapter`/`--target` 与其它子命令一致。
+- **`purge uninstall`**：revert（含 venv 里的 shim）→ 删 `.hermes-purge/` → 提示还残留几个
+  1.x 的 `.bak`（两代引擎不混淆）。
+- **`install.sh`**（POSIX）/ **`install.ps1`**（Windows）：确认 Node ≥18、把仓库放到固定位置、
+  在 PATH 里留 `purge`/`hp`；`--uninstall` 反向清理；不写系统目录、不需要 sudo。
+- `test/setup.js`：11 项——`setup --dry` 只读、非交互不给 `--yes` 拒绝写入、无快照时
+  `uninstall` 不崩、`bash -n install.sh`、临时 HOME/BIN 真装真跑 `purge --version`、
+  `--uninstall` 清干净、版本号三处一致、`install.ps1` 是 CRLF。
+
+### 修复
+
+- `purge uninstall` 崩栈：`SKIP_DIRS` 用了没 require 的 `platform`。
+- `uninstall` 在没有快照时把「无可还原」当失败 → 现在提示后继续清状态目录。
+
 ## 2.1.0 —— adapter 层（引擎与宿主解耦）+ DSH adapter
 
 把「Hermes 专用引擎」拆成「宿主无关引擎 + 可插 adapter」：引擎只认四件事

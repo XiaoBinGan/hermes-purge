@@ -23,6 +23,7 @@ const txn = require('../lib/v2/txn');
 const metrics = require('../lib/v2/metrics');
 const capsLib = require('../lib/v2/caps');
 const adapters = require('../lib/v2/adapters');
+const platform = require('../lib/v2/platform');
 
 /* ───────────── 参数 ───────────── */
 
@@ -49,6 +50,8 @@ function usageText() {
   return [
     'purge —— hermes-purge v2（capability layer）',
     '',
+    '  purge setup  [--yes] [--dry] 一条命令：检测 → 计划 → 应用 → 验证',
+    '  purge uninstall [--yes]      撤销补丁 + 删状态目录（卸干净）',
     '  purge status [--json]        每条 cap 当前走哪层实现',
     '  purge apply  [--dry]         事务式应用（快照 → 写 → 校验）',
     '  purge verify [--level=1|2|3] 静态 / 运行时 / 端到端',
@@ -471,6 +474,117 @@ function cmdStats() {
     '由宿主进程里的 shim 每轮追加。' + C.reset);
 }
 
+/* ───────────── setup / uninstall ───────────── */
+
+/** 用子进程跑自己的某个子命令，stdout/stderr 直通（隔离失败，setup 只管编排） */
+function runSelf(argv) {
+  const r = require('child_process').spawnSync(
+    process.execPath,
+    [__filename].concat(argv, ['--target=' + TARGET, '--adapter=' + ADAPTER.id]),
+    { stdio: 'inherit', windowsHide: true }
+  );
+  return r.status === 0;
+}
+
+function ask(question) {
+  const readline = require('readline');
+  return new Promise((resolve) => {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    rl.question(question, (a) => { rl.close(); resolve(String(a || '').trim().toLowerCase()); });
+  });
+}
+
+async function cmdSetup() {
+  const yes = args.yes === true || args.y === true;
+  const dry = args.dry === true;
+  const rows = CAPS.map((cap) => ({ cap, r: probeChain(cap) }));
+  const count = (st) => rows.filter((x) => x.r.status === st).length;
+  const pend = rows.filter((x) => x.r.status === 'pending');
+
+  console.log(C.b + 'purge setup' + C.reset + '  —— 检测 → 计划 → 应用 → 验证');
+  console.log('  宿主    ' + (ADAPTER.label || ADAPTER.id) + '  ·  ' + ADAPTER.host.label + '=' + (py || '(无)'));
+  console.log('  目录    ' + TARGET);
+  console.log('  cap     ' + CAPS.length + ' 条  ·  ' +
+    paint('已生效 ' + count('applied'), C.g) + '  ' +
+    paint('待应用 ' + pend.length, C.y) + '  ' +
+    paint('不可用 ' + count('drifted'), C.r));
+  if (count('drifted')) {
+    console.log('\n  ' + paint('不可用的 cap（版本/布局不匹配，apply 会跳过）:', C.y));
+    for (const x of rows.filter((y) => y.r.status === 'drifted')) {
+      console.log('   ' + paint('✖', C.r) + ' ' + x.cap.id + ' ' + x.cap.cap + '  ' + C.dim + x.r.detail + C.reset);
+    }
+  }
+  if (!pend.length) {
+    console.log('\n' + paint('已经是干净的应用状态，无需写入。', C.g));
+    console.log('  验证一下：  purge verify --level=2');
+    return;
+  }
+  console.log('\n  即将应用（按实现层）: ' +
+    C.dim + ['ast', 'shim', 'text', 'conf']
+      .map((k) => k + ' ' + pend.filter((x) => x.r.kind === k).length).join(' · ') + C.reset);
+  for (const x of pend) {
+    console.log('   ' + paint('·', C.y) + ' ' + String(x.cap.id).padEnd(5) +
+      paint('[' + x.r.kind + ']', C.c) + ' ' + x.cap.cap);
+  }
+  if (dry) { console.log('\n（--dry 预演，未写入）'); return; }
+
+  if (!yes) {
+    if (!process.stdin.isTTY) {
+      console.log('\n非交互环境：加 --yes 才会真正写入。例：purge setup --yes');
+      process.exitCode = 1;
+      return;
+    }
+    const a = await ask('\n写入这些改动？[y/N] ');
+    if (a !== 'y' && a !== 'yes') { console.log('已取消，什么都没改。'); return; }
+  }
+
+  console.log('\n' + C.b + '① 应用' + C.reset);
+  const okApply = runSelf(['apply', '--no-verify']);
+  if (!okApply) { console.log(paint('\napply 失败，已按事务回滚。看 purge doctor。', C.r)); process.exitCode = 1; return; }
+
+  console.log('\n' + C.b + '② 验证' + C.reset);
+  const okVerify = runSelf(['verify', '--level=2']);
+  console.log('\n' + C.b + '③ 下一步' + C.reset);
+  console.log('  重启宿主进程才生效（approval 状态在 import 期冻结）');
+  console.log('  仪表盘：  hermes dashboard --port 9119');
+  console.log('  看数据：  purge stats');
+  console.log('  回滚：    purge revert' + (okVerify ? '' : paint('   （当前 verify 未全绿，见上）', C.y)));
+  if (!okVerify) process.exitCode = 1;
+}
+
+async function cmdUninstall() {
+  const yes = args.yes === true || args.y === true;
+  if (!yes) {
+    if (!process.stdin.isTTY) { console.log('非交互环境：加 --yes。例：purge uninstall --yes'); process.exitCode = 1; return; }
+    const a = await ask('撤销全部补丁并删除 ' + path.join(TARGET, '.hermes-purge') + '？[y/N] ');
+    if (a !== 'y' && a !== 'yes') { console.log('已取消。'); return; }
+  }
+  console.log(C.b + '① 还原文件' + C.reset);
+  const okRevert = runSelf(['revert']);
+  if (!okRevert) console.log(C.dim + '  （没有可还原的快照，或文件被外部改过 —— 继续清状态目录）' + C.reset);
+  const stateDir = path.join(TARGET, '.hermes-purge');
+  if (fs.existsSync(stateDir)) {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+    console.log('已删除状态目录 ' + stateDir);
+  }
+  // 1.x 的 .bak 与 v2 是两套，提示别混淆
+  const baks = [];
+  const walk = (dir) => {
+    let ents = [];
+    try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch (e) { return; }
+    for (const e of ents) {
+      if (e.isDirectory()) { if (!platform.SKIP_DIRS.has(e.name)) walk(path.join(dir, e.name)); }
+      else if (e.name.endsWith('.hermes-purge.bak')) baks.push(path.join(dir, e.name));
+    }
+  };
+  walk(TARGET);
+  if (baks.length) {
+    console.log('\n' + paint('注意：还有 ' + baks.length + ' 个 1.x 版备份（.hermes-purge.bak）', C.y));
+    console.log('  那是老引擎留下的，v2 不依赖它们。要连 1.x 一起撤：node bin/hermes-purge.js --revert');
+  }
+  console.log('\n清干净了。装回来：purge setup');
+}
+
 /* ───────────── 入口 ───────────── */
 
 const cmd = args._[0] || 'status';
@@ -481,6 +595,8 @@ switch (cmd) {
   case 'revert': cmdRevert(); break;
   case 'doctor': cmdDoctor(); break;
   case 'stats': cmdStats(); break;
+  case 'setup': cmdSetup(); break;
+  case 'uninstall': cmdUninstall(); break;
   default:
     console.log(usageText());
 }

@@ -10,7 +10,7 @@
 对 Hermes Agent 做三层清洗：**提示词人格 / config 审批策略 / 代码层审批门与黑名单**。
 附一个破甲执行器和一个效力边界探针。
 
-补丁主锚验证于 **Hermes 0.21.3**，**0.21.0 全量兼容**（走变体）。当前版本 **2.0.0**（31 条 cap，四层落地）。
+补丁主锚验证于 **Hermes 0.21.3**，**0.21.0 全量兼容**（走变体）。当前版本 **2.2.0**（31 条 cap，四层落地；一条命令安装）。
 
 ---
 
@@ -143,6 +143,24 @@ hardline 探测     = False
 node bin/hermes-purge.js --revert      # 用 .bak 逐个还原
 node bin/hermes-purge.js --uninstall   # 还原 + 清状态目录
 ```
+
+### 最快路径：一条命令装好
+
+```bash
+# macOS / Linux（在仓库目录里跑；已 clone 就直接用这一份）
+./install.sh              # 装到 ~/.hermes-purge，PATH 里留 purge / hp
+purge setup               # 检测 → 计划 → 应用 → 验证，一条命令走完
+```
+
+```powershell
+# Windows（PowerShell）
+.\install.ps1             # 装到 %LOCALAPPDATA%\hermes-purge，写 purge.cmd / hp.cmd
+purge setup
+```
+
+`purge setup` 会先打印计划（宿主、目录、每条 cap 走哪层实现、哪几条不可用），
+交互式确认后才写入；非交互环境加 `--yes`。只想看不动手：`purge setup --dry`。
+卸干净：`purge uninstall --yes`（撤补丁 + 删 shim + 删状态目录），再 `./install.sh --uninstall` 移除命令本身。
 
 ### 安装与卸载（三种方式 · macOS / Linux / Windows）
 
