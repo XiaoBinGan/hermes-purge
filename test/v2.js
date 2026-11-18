@@ -21,6 +21,7 @@ const shim = require('../lib/v2/shim');
 const impls = require('../lib/v2/impls');
 const ast = require('../lib/v2/ast');
 const capsLib = require('../lib/v2/caps');
+const metrics = require('../lib/v2/metrics');
 
 let pass = 0, fail = 0;
 function t(name, fn) {
@@ -29,7 +30,8 @@ function t(name, fn) {
 }
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'purge-v2-'));
-const py = platform.which('python3') || platform.which('python');
+// 宿主 python 优先：PY 显式指定 > which python3 > which python
+const py = process.env.PY || platform.which('python3') || platform.which('python');
 
 /* ───────────── 文本：CRLF / BOM ───────────── */
 
@@ -271,6 +273,204 @@ t('shim 条目覆盖安全核心，且每条带 cap 标签', () => {
   for (const c of caps) if (c.shimMeta) entries.push(...capsLib.shimEntriesFor(c).map((e) => Object.assign({ cap: c.id }, e)));
   assert.ok(entries.length >= 14, '条目数 ' + entries.length);
   assert.ok(entries.every((e) => e.cap && e.module && e.attr));
+});
+
+/* ───────────── 每轮埋点（P4） ───────────── */
+
+console.log('\n每轮埋点');
+
+/** 假宿主：run_conversation 自己累加 token；user_message="boom" 时抛错 */
+const FAKE_HOST_MOD = [
+  'def run_conversation(agent, user_message, system_message=None):',
+  '    if user_message == "boom":',
+  '        raise RuntimeError("host-fail")',
+  '    agent.session_input_tokens = (agent.session_input_tokens or 0) + 120',
+  '    agent.session_output_tokens = (agent.session_output_tokens or 0) + 30',
+  '    return {"final_response": "ok"}',
+  '',
+].join('\n');
+
+// 注意：一律用 `-S` 跑，且按文件路径装载 shim ——
+// 否则若 PY 指向本机已装的 Hermes venv，它的 site-packages/.pth 会先导入真机
+// 那份 shim（污染真实 .hermes-purge 日志，也不是我们要测的代码）。
+const TURN_DRIVER = [
+  'import importlib.util, sys',
+  'sys.path.insert(0, sys.argv[1])',
+  'sys.modules.pop("_hermes_purge_shim", None)',
+  'spec = importlib.util.spec_from_file_location("_hermes_purge_shim", sys.argv[2])',
+  'mod = importlib.util.module_from_spec(spec)',
+  'sys.modules["_hermes_purge_shim"] = mod',
+  'spec.loader.exec_module(mod)   # 装上 meta_path 钩子',
+  'from agent import conversation_loop as cl',
+  '',
+  'class A(object):',
+  '    platform = "cli"',
+  '    model = "claude-sonnet-4"',
+  '    session_input_tokens = 100',
+  '    session_output_tokens = 20',
+  '',
+  'a = A()',
+  'a._purge_refusal_nudges = 2   # 实例属性：C18c 就是挂在 agent 上的',
+  'cl.run_conversation(a, "hi")',
+  'a._purge_refusal_nudges = 0',
+  'cl.run_conversation(a, "again")',
+  'try:',
+  '    cl.run_conversation(a, "boom")',
+  '    print("NO-RAISE")',
+  'except RuntimeError:',
+  '    print("RAISED")',
+  'del a._purge_refusal_nudges',
+  'cl.run_conversation(a, "no-counter")',
+  'print("DONE")',
+].join('\n');
+
+let turnRun = null;
+if (py) {
+  const root = path.join(tmp, 'turn1');
+  fs.mkdirSync(path.join(root, 'agent'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'agent', '__init__.py'), '');
+  fs.writeFileSync(path.join(root, 'agent', 'conversation_loop.py'), FAKE_HOST_MOD);
+  const sp = path.join(root, 'site-packages');
+  fs.mkdirSync(sp, { recursive: true });
+  const v2dir = path.join(root, '.hermes-purge', 'v2');
+  fs.mkdirSync(v2dir, { recursive: true });
+  const logFile = path.join(v2dir, 'shim.log');
+  const metricsFile = path.join(v2dir, 'metrics.jsonl');
+  fs.writeFileSync(path.join(sp, shim.SHIM_NAME), shim.render([], logFile, metricsFile));
+  const r = spawnSync(py, ['-S', '-c', TURN_DRIVER, sp, path.join(sp, shim.SHIM_NAME)],
+    { encoding: 'utf8', cwd: root, timeout: 120000, windowsHide: true });
+  turnRun = { root, r, rows: metrics.read(root) };
+}
+
+if (!turnRun) {
+  console.log('  - 跳过埋点用例（本机无 python3，可设 PY=/path/to/python）');
+} else {
+  t('turn 钩子：跑一轮就落一条记录，字段齐全', () => {
+    const { r, rows } = turnRun;
+    assert.strictEqual(r.status, 0, (r.stderr || '').trim().split('\n').slice(-3).join(' | '));
+    assert.strictEqual(rows.length, 4, '记录数 ' + rows.length + ' · ' + (r.stderr || '').slice(-200));
+    const rec = rows[0];
+    for (const k of ['ts', 'surface', 'model', 'turn', 'refusals', 'approval', 'tokens', 'ok']) {
+      assert.ok(Object.prototype.hasOwnProperty.call(rec, k), '缺字段 ' + k);
+    }
+    assert.strictEqual(rec.surface, 'cli');
+    assert.strictEqual(rec.model, 'claude-sonnet-4');
+    assert.strictEqual(rec.turn, 1);
+    assert.deepStrictEqual(rec.refusals, { nudges: 2, hit: true });
+    assert.ok(rec.approval && Object.prototype.hasOwnProperty.call(rec.approval, 'mode'));
+    assert.deepStrictEqual(rec.tokens, { in: 120, out: 30 });
+    assert.strictEqual(rec.ok, true);
+    assert.ok(!isNaN(Date.parse(rec.ts)), 'ts 不是合法时间: ' + rec.ts);
+    // 第二轮：计数被清零 → hit false，但 turn 序号递增
+    assert.strictEqual(rows[1].turn, 2);
+    assert.strictEqual(rows[1].refusals.hit, false);
+  });
+
+  t('turn 钩子：宿主流异常 → ok:false 且不吞异常', () => {
+    const { r, rows } = turnRun;
+    assert.ok((r.stdout || '').includes('RAISED'), '异常被吞了: ' + (r.stdout || '') + (r.stderr || ''));
+    assert.strictEqual(rows[2].turn, 3);
+    assert.strictEqual(rows[2].ok, false);
+  });
+
+  t('turn 钩子：agent 上没有 _purge_refusal_nudges 时安全读成 null', () => {
+    const last = turnRun.rows[3];
+    assert.strictEqual(last.refusals.nudges, null);
+    assert.strictEqual(last.refusals.hit, false);
+    assert.strictEqual(last.ok, true);
+  });
+}
+
+/* ───────────── stats 聚合 ───────────── */
+
+const statsRoot = path.join(tmp, 'stats1');
+fs.mkdirSync(path.join(statsRoot, '.hermes-purge', 'v2'), { recursive: true });
+fs.writeFileSync(path.join(statsRoot, '.hermes-purge', 'v2', 'metrics.jsonl'), [
+  { event: 'turn', ts: '2026-11-17T10:00:00.000Z', surface: 'cli', model: 'claude-sonnet-4', turn: 1,
+    refusals: { nudges: 2, hit: true }, approval: { mode: 'off' }, tokens: { in: 1000, out: 200 }, ok: true },
+  { event: 'turn', ts: '2026-11-17T10:01:00.000Z', surface: 'cli', model: 'claude-sonnet-4', turn: 2,
+    refusals: { nudges: 1, hit: true }, approval: { mode: 'off' }, tokens: { in: 800, out: 150 }, ok: true },
+  { event: 'turn', ts: '2026-11-17T10:02:00.000Z', surface: 'dashboard', model: 'mystery-1', turn: 3,
+    refusals: { nudges: 0, hit: false }, approval: { mode: null }, tokens: { in: 200, out: 100 }, ok: false },
+  { event: 'turn', ts: '2026-11-17T10:03:00.000Z', surface: 'dashboard', model: 'mystery-1', turn: 4,
+    refusals: { nudges: null, hit: false }, approval: { mode: null }, tokens: { in: 100, out: 100 }, ok: true },
+  { at: '2026-11-17T09:00:00.000Z', event: 'apply', changed: 31, skipped: 0, failed: 0, shim: 14 },
+].map((r) => JSON.stringify(r)).join('\n') + '\n', 'utf8');
+
+fs.writeFileSync(path.join(statsRoot, '.hermes-purge', 'v2', 'shim.log'), [
+  { ok: true, module: 'tools.approval', attr: '_YOLO_MODE_FROZEN', mode: 'const', cap: 'C01' },
+  { ok: true, module: 'tools.approval', attr: '_YOLO_MODE_FROZEN', mode: 'const', cap: 'C01' },
+  { ok: true, module: 'tools.approval', attr: 'is_approval_bypass_active', mode: 'true', cap: 'C03' },
+  { ok: false, module: 'tools.approval_context', attr: '_get_approval_mode', err: 'attr-missing', cap: 'C04' },
+  { ok: true, module: 'agent.conversation_loop', attr: 'run_conversation', mode: 'turn-hook' },
+].map((r) => JSON.stringify(r)).join('\n') + '\n', 'utf8');
+
+t('stats 聚合：轮次 / 拒答命中 / 平均重采样 / tokens 计数正确', () => {
+  const s = metrics.stats(statsRoot);
+  assert.strictEqual(s.turnRows, 4);
+  assert.strictEqual(s.eventRows, 1);
+  assert.strictEqual(s.hasTurns, true);
+  assert.strictEqual(s.refusalHits, 2);
+  assert.strictEqual(s.refusalRate, 0.5);
+  assert.strictEqual(s.nudgeTotal, 3);
+  assert.strictEqual(s.avgNudges, 0.75);
+  assert.strictEqual(s.nudgeMissing, 1);
+  assert.strictEqual(s.failedTurns, 1);
+  assert.deepStrictEqual(s.tokens, { in: 2100, out: 550, total: 2650, turns: 4, turnsMissing: 0 });
+  assert.strictEqual(s.surfaces.cli, 2);
+  assert.strictEqual(s.models['claude-sonnet-4'], 2);
+  assert.strictEqual(s.eventsByType.apply, 1);
+});
+
+t('stats 聚合：cap 命中只数 shim.log 里带 cap 的行', () => {
+  const s = metrics.stats(statsRoot);
+  assert.strictEqual(s.byCap.C01, 2);
+  assert.strictEqual(s.byCap.C03, 1);
+  assert.strictEqual(s.capFails.C04, 1);
+  assert.strictEqual(s.capRows, 4);
+  assert.strictEqual(s.capUnlabeled, 1, 'turn-hook 行不该算 cap 命中');
+});
+
+t('stats 成本：价目表可覆盖，未定价模型给 null 不给 0', () => {
+  const prices = { 'claude-sonnet-4': { in: 3, out: 15 }, mystery: { in: 1, out: 2 } };
+  const s = metrics.stats(statsRoot, { prices });
+  // claude: 1800in/350out → 1800/1e6*3 + 350/1e6*15 = 0.01065
+  // mystery: 300in/200out → 0.0003 + 0.0004 = 0.0007
+  assert.ok(Math.abs(s.cost.usd - 0.01135) < 1e-9, '成本 ' + s.cost.usd);
+  assert.strictEqual(s.cost.pricedModels, 2);
+  assert.strictEqual(s.cost.unpricedModels, 0);
+
+  const none = metrics.stats(statsRoot, { prices: {} });
+  assert.strictEqual(none.cost.usd, null, '没有价目就不该给数字');
+  assert.deepStrictEqual(none.cost.unpriced.sort(), ['claude-sonnet-4', 'mystery-1']);
+});
+
+t('stats 空树：明确「没有轮次数据」，不编 0 成本', () => {
+  const empty = path.join(tmp, 'stats-empty');
+  fs.mkdirSync(empty, { recursive: true });
+  const s = metrics.stats(empty);
+  assert.strictEqual(s.hasTurns, false);
+  assert.strictEqual(s.turnRows, 0);
+  assert.strictEqual(s.avgNudges, null);
+  assert.strictEqual(s.cost.usd, null);
+});
+
+/* ───────────── shim 里的 turn 钩子代码本身 ───────────── */
+
+t('shim 模板含 turn 钩子且仍是合法 python（Windows 路径也过）', () => {
+  const src = shim.render(
+    [{ cap: 'C01', module: 'tools.approval', attr: '_F', mode: 'const', value: true }],
+    'C:\\Users\\x\\.hermes-purge\\v2\\shim.log',
+    'C:\\Users\\x\\.hermes-purge\\v2\\metrics.jsonl');
+  for (const needle of ['_purge_make_turn_wrapper', '_purge_emit_turn', 'agent.conversation_loop', 'metrics.jsonl']) {
+    assert.ok(src.includes(needle), '缺 ' + needle);
+  }
+  if (!py) return;
+  const f = path.join(tmp, 'shim_p4.py');
+  fs.writeFileSync(f, src, 'utf8');
+  const r = spawnSync(py, ['-S', '-c', 'import ast,sys;ast.parse(open(sys.argv[1],encoding="utf-8").read())', f],
+    { encoding: 'utf8', timeout: 60000, windowsHide: true });
+  assert.strictEqual(r.status, 0, String(r.stderr));
 });
 
 /* ───────────── 可选的树级闭环 ───────────── */

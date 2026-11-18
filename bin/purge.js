@@ -8,7 +8,7 @@
  *   purge verify  [--level=1|2|3] [--target=DIR]
  *   purge revert  [--force] [--id=SNAP] [--target=DIR]
  *   purge doctor  [--target=DIR]
- *   purge stats   [--since=ISO] [--target=DIR]
+ *   purge stats   [--json] [--since=ISO] [--target=DIR]
  *   purge --help|-h / --version|-v
  *
  * 与 1.x（bin/hermes-purge.js）共用 lib/patches.js 的锚点清单，但落地方式不同：
@@ -57,7 +57,7 @@ function usageText() {
     '  purge verify [--level=1|2|3] 静态 / 运行时 / 端到端',
     '  purge revert [--force]       按 manifest 逐字节还原',
     '  purge doctor                 体检：哈希漂移 / 临时文件 / shim',
-    '  purge stats                  观测：cap 命中、拒答收敛、成本',
+    '  purge stats [--json] [--since=ISO]  观测：轮次、拒答收敛、cap 命中、成本',
     '',
     '  --target=DIR   指定 Hermes 代码根（默认自动探测或 HERMES_HOME）',
     '',
@@ -347,13 +347,103 @@ function cmdDoctor() {
   if (!rep.ok) process.exitCode = 1;
 }
 
+/** 终端里 CJK 占两格，padEnd 按字符数会错位 —— 自己算显示宽度 */
+function dispWidth(s) {
+  let w = 0;
+  for (const ch of String(s)) {
+    const c = ch.codePointAt(0);
+    const wide = c >= 0x1100 && (
+      c <= 0x115f || (c >= 0x2e80 && c <= 0xa4cf) || (c >= 0xac00 && c <= 0xd7a3) ||
+      (c >= 0xf900 && c <= 0xfaff) || (c >= 0xfe30 && c <= 0xfe6f) ||
+      (c >= 0xff00 && c <= 0xff60) || (c >= 0xffe0 && c <= 0xffe6));
+    w += wide ? 2 : 1;
+  }
+  return w;
+}
+
+function padTo(s, n) {
+  const w = dispWidth(s);
+  return w >= n ? String(s) : String(s) + ' '.repeat(n - w);
+}
+
+function fmtInt(n) {
+  return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
+function fmtPct(x) {
+  return x === null || x === undefined ? 'n/a' : (x * 100).toFixed(1) + '%';
+}
+
+function listOf(obj) {
+  const keys = Object.keys(obj || {});
+  if (!keys.length) return '（无）';
+  return keys.map((k) => k + ' ' + obj[k]).join(' · ');
+}
+
 function cmdStats() {
   const s = metrics.stats(TARGET, { since: args.since });
-  console.log(C.b + 'stats' + C.reset + '  rows=' + s.rows + '\n');
-  console.log('  cap 命中   ' + JSON.stringify(s.byCap));
-  console.log('  impl 分布  ' + JSON.stringify(s.byImpl));
-  console.log('  拒答命中   ' + s.refusalHits + '  收敛 ' + s.refusalRecovered);
-  console.log('  成本       $' + s.costUsd);
+  if (args.json) { console.log(JSON.stringify(Object.assign({ target: TARGET }, s), null, 2)); return; }
+
+  console.log(C.b + 'stats' + C.reset + '  target=' + TARGET);
+  console.log(C.dim + metrics.file(TARGET) + C.reset);
+  console.log(C.dim + '轮次 ' + s.turnRows + ' · 引擎事件 ' + s.eventRows + ' · shim 日志行 ' + s.capRows + C.reset + '\n');
+
+  const line = (k, v) => console.log('  ' + C.dim + padTo(k, 12) + C.reset + v);
+
+  console.log('  ' + C.c + '── 轮次 ──' + C.reset);
+  if (!s.hasTurns) {
+    console.log('  ' + C.y + '还没有轮次数据（跑一轮 hp 或 dashboard 会话后再看）' + C.reset);
+  } else {
+    line('轮次总数', String(s.turnRows));
+    line('拒答命中', s.refusalHits + ' (' + fmtPct(s.refusalRate) + ')  ' +
+      C.dim + '平均重采样 ' + (s.avgNudges === null ? 'n/a' : s.avgNudges) + '/轮 · 合计 ' + s.nudgeTotal + C.reset);
+    line('异常轮次', String(s.failedTurns) + C.dim + '  (ok:false)' + C.reset);
+    line('surface', listOf(s.surfaces));
+    line('模型', listOf(s.models));
+    if (s.nudgeMissing) {
+      line('读数缺失', C.y + s.nudgeMissing + ' 轮没有 _purge_refusal_nudges（C18c 未落地？）' + C.reset);
+    }
+  }
+
+  console.log('\n  ' + C.c + '── tokens / 成本 ──' + C.reset);
+  if (!s.tokens.turns) {
+    line('tokens', C.y + 'n/a' + C.reset + C.dim + '（宿主没吐出 usage 计数，不猜）' + C.reset);
+    line('估算成本', C.y + 'n/a' + C.reset + C.dim + '（没有 token 就没有成本）' + C.reset);
+  } else {
+    line('tokens', '入 ' + fmtInt(s.tokens.in) + ' · 出 ' + fmtInt(s.tokens.out) +
+      C.dim + '（' + s.tokens.turns + ' 轮有数据' +
+      (s.tokens.turnsMissing ? '，' + s.tokens.turnsMissing + ' 轮缺' : '') + '）' + C.reset);
+    if (s.cost.usd === null) {
+      line('估算成本', C.y + 'n/a' + C.reset + C.dim + '（模型不在默认价目表里：' + s.cost.unpriced.join(', ') + '）' + C.reset);
+    } else {
+      line('估算成本', paint('$' + s.cost.usd.toFixed(4), C.g) + C.dim + '  （默认价目表，USD / 1M tokens）' + C.reset);
+      for (const g of s.cost.byModel) {
+        const price = g.price ? '$' + g.price.in + '/$' + g.price.out : '无价目';
+        console.log('  ' + ' '.repeat(12) + C.dim + padTo(g.model, 26) + fmtInt(g.tokensIn) + ' in · ' +
+          fmtInt(g.tokensOut) + ' out · ' + price +
+          (g.usd === null ? ' · n/a' : ' · $' + g.usd.toFixed(4)) + C.reset);
+      }
+      if (s.cost.unpricedModels) {
+        console.log('  ' + ' '.repeat(12) + C.y + '未定价：' + s.cost.unpriced.join(', ') + C.reset);
+      }
+    }
+  }
+
+  console.log('\n  ' + C.c + '── cap 命中（shim.log）──' + C.reset);
+  if (!s.capRows) {
+    line('cap 命中', C.y + '还没有 shim 落地记录' + C.reset + C.dim + '（purge apply 后跑一轮）' + C.reset);
+  } else {
+    line('cap 命中', listOf(s.byCap));
+    if (Object.keys(s.capFails).length) line('落地失败', paint(JSON.stringify(s.capFails), C.r));
+    if (s.capUnlabeled) line('无 cap 行', String(s.capUnlabeled) + C.dim + '  (turn-hook / attr-missing)' + C.reset);
+  }
+
+  if (s.eventRows) {
+    console.log('\n  ' + C.c + '── 引擎事件 ──' + C.reset);
+    line('事件', listOf(s.eventsByType));
+  }
+  if (!s.hasTurns) console.log('\n' + C.dim + '提示：stats 读的是 ' + metrics.file(TARGET) + '，' +
+    '由宿主进程里的 shim 每轮追加。' + C.reset);
 }
 
 /* ───────────── 入口 ───────────── */
