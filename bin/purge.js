@@ -9,6 +9,7 @@
  *   purge revert  [--force] [--id=SNAP] [--target=DIR]
  *   purge doctor  [--target=DIR]
  *   purge stats   [--since=ISO] [--target=DIR]
+ *   purge --help|-h / --version|-v
  *
  * 与 1.x（bin/hermes-purge.js）共用 lib/patches.js 的锚点清单，但落地方式不同：
  *   AST（符号级）→ shim（运行时）→ 文本（兼容层）→ 配置
@@ -41,6 +42,46 @@ function parseArgs(argv) {
 const args = parseArgs(process.argv);
 const C = { reset: '\x1b[0m', dim: '\x1b[2m', b: '\x1b[1m', g: '\x1b[32m', y: '\x1b[33m', r: '\x1b[31m', c: '\x1b[36m' };
 const paint = (s, code) => (process.stdout.isTTY ? code + s + C.reset : s);
+
+/* ───────────── help / version ─────────────
+ * 这两个必须优先于目标目录探测：--version / --help 在没装 Hermes 的机器上也要能跑
+ * （npm pack 之后的端到端自检就是靠这一点）。
+ */
+
+function usageText() {
+  return [
+    'purge —— hermes-purge v2（capability layer）',
+    '',
+    '  purge status [--json]        每条 cap 当前走哪层实现',
+    '  purge apply  [--dry]         事务式应用（快照 → 写 → 校验）',
+    '  purge verify [--level=1|2|3] 静态 / 运行时 / 端到端',
+    '  purge revert [--force]       按 manifest 逐字节还原',
+    '  purge doctor                 体检：哈希漂移 / 临时文件 / shim',
+    '  purge stats                  观测：cap 命中、拒答收敛、成本',
+    '',
+    '  --target=DIR   指定 Hermes 代码根（默认自动探测或 HERMES_HOME）',
+    '',
+    '  -h, --help     显示本帮助',
+    '  -v, --version  显示版本号',
+  ].join('\n');
+}
+
+function pkgVersion() {
+  try {
+    const raw = fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8');
+    return JSON.parse(raw).version || '0.0.0';
+  } catch (e) {
+    return '0.0.0';
+  }
+}
+
+const sub = args._[0];
+const wantsHelp = args.help === true || args.h === true || sub === 'help' || sub === '-h' || sub === '--help';
+const wantsVersion = args.version === true || args.v === true || sub === 'version' || sub === '-v' || sub === '--version';
+
+// 顶层 return 在 CJS 里合法：直接把模块收尾，stdout 由运行时正常 flush
+if (wantsHelp) { console.log(usageText()); return; }
+if (wantsVersion) { console.log(pkgVersion()); return; }
 
 function resolveTarget() {
   if (args.target) return path.resolve(args.target);
@@ -326,16 +367,5 @@ switch (cmd) {
   case 'doctor': cmdDoctor(); break;
   case 'stats': cmdStats(); break;
   default:
-    console.log([
-      'purge —— hermes-purge v2（capability layer）',
-      '',
-      '  purge status [--json]        每条 cap 当前走哪层实现',
-      '  purge apply  [--dry]         事务式应用（快照 → 写 → 校验）',
-      '  purge verify [--level=1|2|3] 静态 / 运行时 / 端到端',
-      '  purge revert [--force]       按 manifest 逐字节还原',
-      '  purge doctor                 体检：哈希漂移 / 临时文件 / shim',
-      '  purge stats                  观测：cap 命中、拒答收敛、成本',
-      '',
-      '  --target=DIR   指定 Hermes 代码根（默认自动探测或 HERMES_HOME）',
-    ].join('\n'));
+    console.log(usageText());
 }
