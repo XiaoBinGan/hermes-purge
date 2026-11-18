@@ -478,6 +478,11 @@ t('shim 模板含 turn 钩子且仍是合法 python（Windows 路径也过）', 
 if (process.argv.includes('--e2e')) {
   const idx = process.argv.indexOf('--e2e');
   const dir = process.argv[idx + 1];
+  if (!dir || dir.startsWith('--')) {
+    console.log('\n跳过树级闭环：--e2e 后面要给一个 Hermes 树目录（例：--e2e /tmp/hermes-tree）');
+    console.log('\n' + (fail === 0 ? `全部通过 ${pass}/${pass}` : `${pass} 通过 · ${fail} 失败`));
+    process.exit(fail === 0 ? 0 : 1);
+  }
   console.log('\n树级闭环（' + dir + '）');
   const purge = path.join(__dirname, '..', 'bin', 'purge.js');
   const run = (a) => spawnSync(process.execPath, [purge].concat(a, ['--target=' + dir]), { encoding: 'utf8' });
