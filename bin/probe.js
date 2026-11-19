@@ -3,9 +3,9 @@
  * probe.js — hermes-purge 效力边界探针
  *
  * 对每类请求在 Hermes 里跑 N 次「原始单发」（不做内部重试），统计：
- *   - 单次通过率 p
+ *   - 单次通过率 p，带 Wilson 95% 置信区间（N<12 会明确警告别下结论）
  *   - 拒绝话术归到哪一类（分类式 / 后果式 / 给替代 / 推能力 / 拒注入）
- *   - N 次重试的收敛期望 1-(1-p)^N
+ *   - N 次重试的收敛期望（几何分布推算，不是实测通过率）
  *
  * 用来分清：哪些类是「概率性的、重试能消化」，
  * 哪些类是「恒定回归、加多少次都是 0」。
@@ -14,6 +14,7 @@
  *   node probe.js --cases=adult   # 只跑指定类
  *   node probe.js --n=5           # 每类 5 次
  *   node probe.js --desktop       # 按桌面端 surface 建会话（source=desktop）
+ *   node probe.js --stub --n=4    # 不调模型，用假响应验证报表口径（不花 token）
  *
  * 通道与判定复用 lib/core.js + lib/channels.js。
  * 结果写 state/probe-<ts>.json，样本写 state/samples/
@@ -23,6 +24,7 @@
 const fs = require('fs');
 const path = require('path');
 const core = require('../lib/core');
+const stat = require('../lib/v2/stats');
 const ch = require('../lib/channels');
 
 const args = {};
@@ -34,6 +36,11 @@ for (const a of process.argv.slice(2)) {
 }
 
 const N = Number(args.n || 3);
+// --stub：不调用模型，用固定假响应跑通「判定 → 统计 → 报告」，
+// 用来验证报表口径（置信区间、N 警告、汇总额），不消耗 token。
+const STUB = !!args.stub;
+const STUB_OK = '```python\n' + 'x = 1  # stub sample line\n'.repeat(24) + '```\n';
+const STUB_REFUSE = '抱歉，这个我不写。';
 const BASE = args.dash || process.env.HERMES_DASH || 'http://127.0.0.1:9119';
 // 桌面端与 dashboard 是同一个 agent 进程，只有 platform/source 不同。
 // 默认不声明 source（网关按 tui 处理）；--desktop 声明后网关挂上 desktop_ui 工具集。
@@ -114,7 +121,7 @@ function kindsOf(text) {
 (async () => {
   let tok = args.token || process.env.HERMES_TOKEN || '';
   if (!tok) {
-    try { tok = await ch.dashToken(BASE); }
+    try { tok = STUB ? 'stub' : await ch.dashToken(BASE); }
     catch (e) { console.error('拿不到 dashboard token：' + e.message + '\n（dashboard 是否在跑？hermes dashboard）'); process.exit(3); }
   }
 
@@ -136,7 +143,9 @@ function kindsOf(text) {
       process.stderr.write('  [' + key + ' ' + (i + 1) + '/' + N + '] ');
       let text;
       try {
-        text = await ch.viaDash({
+        if (STUB) {
+          text = (key === 'control' || i % 3 === 2) ? STUB_REFUSE : STUB_OK;
+        } else text = await ch.viaDash({
           base: BASE, token: tok, source: SOURCE,
           prompt: turn.prompt, nudge: turn.nudge, opener: turn.opener,
         });
@@ -162,11 +171,15 @@ function kindsOf(text) {
     const kindsTally = {};
     for (const r of rows) for (const k of r.kinds) kindsTally[k] = (kindsTally[k] || 0) + 1;
 
+    const sum = stat.summarize(passCount, N, 6);
     results[key] = {
       label: c.label, control: !!c.control, n: N,
       pass: passCount, p,
+      ci: sum.ci,                 // Wilson 95%
+      warn: sum.warn,             // N<12 → 别下结论
       kinds: kindsTally,
-      retry6: 1 - Math.pow(1 - p, 6),
+      // 「6 次重试的期望」是几何分布的推算值，不是实测通过率
+      retry6: sum.converge,
       rows,
     };
   }
@@ -179,13 +192,23 @@ function kindsOf(text) {
   };
 
   console.log('');
-  console.log(pad('探针', 30) + pad('单次通过', 13) + pad('话术分布', 30) + '6 次重试期望');
+  console.log(pad('探针', 28) + pad('单发 p [95% CI]', 26) + pad('话术分布', 26) + '6 次重试（期望）');
   console.log('─'.repeat(104));
   for (const [k, r] of Object.entries(results)) {
     const kindStr = Object.entries(r.kinds).map(([a, b]) => a + '×' + b).join(' ') || '—';
     const exp = r.control ? '恒定 0' : (r.retry6 * 100).toFixed(0) + '%';
-    console.log(pad(r.label, 30) + pad(r.pass + '/' + r.n + '  p=' + r.p.toFixed(2), 13) + pad(kindStr, 30) + exp);
+    const ci = r.ci ? '[' + r.ci[0].toFixed(2) + ', ' + r.ci[1].toFixed(2) + ']' : '—';
+    console.log(pad(r.label, 28) +
+      pad(r.pass + '/' + r.n + '  ' + r.p.toFixed(2) + ' ' + ci, 26) +
+      pad(kindStr, 26) + exp);
   }
+  const thin = Object.entries(results).filter(([, r]) => r.warn);
+  if (thin.length) {
+    console.log('\n注意：这些类 N<12，比例只能当参考，别写成「通过率」：' +
+      thin.map(([k, r]) => k + '(' + r.n + ')').join(' '));
+  }
+  console.log('\n口径：左列是「发一次就拿到合格产物」的比例（含置信区间）；' +
+    '右列是几何分布推算的「6 次重试后期望」，不是实测通过率。');
 
   const out = path.join(STATE, 'probe-' + ts + '.json');
   fs.writeFileSync(out, JSON.stringify({

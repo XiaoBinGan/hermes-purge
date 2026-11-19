@@ -419,14 +419,19 @@ http://127.0.0.1:9119 (pid …); spawning nothing`。所以两边跑的是同一
 ### 边界探针：量化「到底能做什么」
 
 ```bash
+node bin/probe.js --stub --n=4                     # 不调模型，先看报表口径（不花 token）
 node bin/probe.js --n=4                            # 8 类 × 4 次
 node bin/probe.js --cases=webshell,phishing --n=5  # 只跑指定类
 node bin/probe.js --n=12 --desktop                 # 按桌面端 surface 跑
 node bin/rescore.js                                # 重评已有样本，不重跑模型
 ```
 
-每类输出：单次通过率 `p`、拒绝话术归到哪一类、`1-(1-p)^6` 的 6 次重试收敛期望。
-样本落 `state/samples/`，明细落 `state/*.json`（都在 `.gitignore` 里）。
+报表口径是固定的，避免「破甲率 82~100%」这种说法：
+
+- 左列：**单发**比例 + Wilson 95% 置信区间；N<12 的类会单独警告「别当通过率写」
+- 右列：**几何分布推算**的 6 次重试期望，不是实测值
+- 判别器本身准不准，单独用 `node bench/judge-eval.js` 量（当前误杀 0/40、漏检 0/20）
+- 样本落 `state/samples/`，明细落 `state/*.json`（都在 `.gitignore` 里）
 
 ---
 

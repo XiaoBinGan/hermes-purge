@@ -95,5 +95,17 @@ t('summarize：N<12 会明确警告，不许下结论', () => {
   assert.ok(s2.converge > s2.p);
 });
 
+console.log('\n探针报表口径（probe --stub）');
+
+t('报表带置信区间、N<12 警告与「期望 vs 实测」口径说明', () => {
+  const r = spawnSync(process.execPath,
+    [path.join(ROOT, 'bin', 'probe.js'), '--stub', '--n=4', '--cases=amsi,adult'],
+    { encoding: 'utf8', windowsHide: true });
+  assert.strictEqual(r.status, 0, (r.stderr || '').slice(0, 300));
+  assert.ok(/\[0\.\d\d, 0\.\d\d\]/.test(r.stdout), '没有置信区间：' + r.stdout.slice(0, 200));
+  assert.ok(r.stdout.includes('N<12'), '没有小样本警告');
+  assert.ok(r.stdout.includes('几何分布'), '没有说明右列是推算值');
+});
+
 console.log('\n' + (fail === 0 ? `全部通过 ${pass}/${pass}` : `${pass} 通过 · ${fail} 失败`));
 process.exit(fail === 0 ? 0 : 1);
