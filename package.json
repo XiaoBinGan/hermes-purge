@@ -1,6 +1,6 @@
 {
   "name": "hermes-purge",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "宿主无关的能力层（capability）引擎 —— adapter 注册表 + AST/shim/文本/配置 四层落地，内置 Hermes Agent 与 DeepSeek Harness 两个 adapter；事务回滚 + 三级验证 + 观测。跨 macOS / Windows。",
   "license": "MIT",
   "author": "XiaoBinGan",
@@ -45,19 +45,22 @@
     "LICENSE",
     "docs/",
     "install.sh",
-    "install.ps1"
+    "install.ps1",
+    "bench/"
   ],
   "scripts": {
     "status": "node bin/hermes-purge.js --status",
     "apply": "node bin/hermes-purge.js --apply",
     "verify": "node bin/hermes-purge.js --verify",
     "revert": "node bin/hermes-purge.js --revert",
-    "test": "node test/smoke.js && node test/v2.js && node test/dsh.js && node test/setup.js",
+    "test": "node test/smoke.js && node test/v2.js && node test/dsh.js && node test/setup.js && node test/bench.js",
     "test:package": "node test/package.js",
     "test:dsh": "node test/dsh.js",
     "v2": "node bin/purge.js",
     "v2:dsh": "node bin/purge.js status --adapter=dsh",
-    "test:setup": "node test/setup.js"
+    "test:setup": "node test/setup.js",
+    "test:bench": "node test/bench.js",
+    "judge": "node bench/judge-eval.js"
   },
   "engines": {
     "node": ">=18"
