@@ -122,6 +122,30 @@ t('install.sh 装到临时 HOME/BIN → purge --version 可用 → --uninstall �
   assert.ok(!fs.existsSync(path.join(bin, 'purge')), '卸载后 purge 还在');
 });
 
+console.log('\n一条命令安装（--setup）');
+
+t('install.sh --setup --yes 会装完接着跑 setup（真套在临时 Hermes 树上）', () => {
+  if (process.platform === 'win32') { console.log('    （Windows 跳过）'); return; }
+  const host = path.join(TMP, 'host');
+  fs.mkdirSync(path.join(host, 'hermes-agent', 'hermes_cli'), { recursive: true });
+  fs.mkdirSync(path.join(host, 'hermes-agent', 'agent'), { recursive: true });
+  fs.writeFileSync(path.join(host, 'config.yaml'), 'model:\n  default: fake\n');
+  const home = path.join(TMP, 'cmd-home');
+  const bin = path.join(TMP, 'cmd-bin');
+  // 假宿主（只有目录骨架）应用后必然 verify 不过、退出码非 0 —— 这里只验「接线」：
+  // install.sh 装完命令后真的把 setup 跑起来了，且 purge 命令已就位。
+  const r = spawnSync('bash', [sh, '--setup', '--yes'], {
+    encoding: 'utf8',
+    env: Object.assign({}, process.env, {
+      HERMES_PURGE_HOME: home, HERMES_PURGE_BIN: bin, HERMES_HOME: host,
+    }),
+  });
+  const out = (r.stdout || '') + (r.stderr || '');
+  assert.ok(out.includes('purge setup'), '没跑到 setup：' + out.slice(-200));
+  assert.ok(/cap\s+\d+ 条/.test(out), 'setup 没有打印 cap 统计');
+  assert.ok(fs.existsSync(path.join(bin, 'purge')), '没装出 purge 命令');
+});
+
 console.log('\n版本与文档一致性');
 
 t('package.json version == purge --version', () => {

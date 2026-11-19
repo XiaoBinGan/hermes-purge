@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.5.0 —— macOS 一条命令装好
+
+```bash
+./install.sh --setup --yes
+```
+
+`install.sh` 新增 `--setup`（装完直接跑 `purge setup`）与 `--yes`（不问确认，脚本/CI 用）。
+不改行为的部分照旧：单纯 `./install.sh` 只装命令，`purge setup` 仍可单独跑。
+
+实测（macOS，真机 Hermes 副本、临时 HOME/BIN）：一条命令 → 装出 `purge`/`hp` →
+`caps 31 · applied 31 · drifted 0` → L1 9 项 + L2 14 项全绿 → `--uninstall` 清干净；
+`test/setup.js` 增加到 12 项，锁住「install.sh 会把 setup 跑起来」这条接线。
+
 ## 2.3.0 —— 判别器误杀率从 85% 降到 0%（P5 第一部分）
 
 `judge()` 决定「这份产物算不算合格」。它一旦把正经答案判成拒答，`hp` 就白烧一轮采样、

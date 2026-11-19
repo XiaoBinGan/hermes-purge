@@ -2,6 +2,8 @@
 # hermes-purge 一键安装（macOS / Linux）
 #
 #   ./install.sh                 # 装到 ~/.hermes-purge，并建 purge / hp 两个命令
+#   ./install.sh --setup         # 装完直接跑 purge setup（一条命令装好）
+#   ./install.sh --setup --yes   # 同上，但不问确认（脚本/CI 用）
 #   ./install.sh --uninstall     # 删掉命令与目录
 #   HERMES_PURGE_HOME=... ./install.sh
 #   HERMES_PURGE_BIN=...  ./install.sh      # 命令装到别处（默认 ~/.local/bin）
@@ -14,14 +16,18 @@ REPO="${HERMES_PURGE_REPO:-https://github.com/XiaoBinGan/hermes-purge.git}"
 DEST="${HERMES_PURGE_HOME:-$HOME/.hermes-purge}"
 BIN="${HERMES_PURGE_BIN:-$HOME/.local/bin}"
 MODE=install
+DO_SETUP="${HERMES_PURGE_SETUP:-0}"
+DO_YES=0
 
 for a in "$@"; do
   case "$a" in
     --uninstall|-u) MODE=uninstall ;;
+    --setup) DO_SETUP=1 ;;
+    --yes|-y) DO_SETUP=1; DO_YES=1 ;;
     --home=*) DEST="${a#*=}" ;;
     --bin=*)  BIN="${a#*=}" ;;
     -h|--help)
-      sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
+      sed -n '2,/^set -euo pipefail/p' "$0" | sed 's/^# \{0,1\}//' | sed '$d'
       exit 0 ;;
     *) echo "未知参数：$a（--help 看用法）" >&2; exit 2 ;;
   esac
@@ -80,6 +86,15 @@ case ":$PATH:" in
   *) warn "注意：$BIN 不在 PATH 里。把下面一行加到 ~/.zshrc 或 ~/.bashrc："
      warn "  export PATH=\"$BIN:\$PATH\"" ;;
 esac
+
+if [ "$DO_SETUP" = "1" ]; then
+  say ""
+  say "—— 装完了，直接跑 purge setup ——"
+  args_setup=""
+  [ "$DO_YES" = "1" ] && args_setup="--yes"
+  # shellcheck disable=SC2086
+  exec node "$DEST/bin/purge.js" setup $args_setup
+fi
 
 say ""
 say "下一步（一条命令，检测 → 计划 → 应用 → 验证）："
