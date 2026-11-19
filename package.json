@@ -46,7 +46,8 @@
     "docs/",
     "install.sh",
     "install.ps1",
-    "bench/"
+    "bench/",
+    "windows-smoke.ps1"
   ],
   "scripts": {
     "status": "node bin/hermes-purge.js --status",

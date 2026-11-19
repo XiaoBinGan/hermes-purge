@@ -303,6 +303,10 @@ npm rm -g hermes-purge
 
 - **0.21.0 为什么走变体**：0.21.2/0.21.3 才做的模块拆分（`approval_context` / `approval_detection` / `turn_stop_gates` / `stream_delivery` / `turn_request_assembly`）。0.21.0 里这些函数还在 `tools/approval.py`、`agent/conversation_loop.py`、`run_agent.py`。走变体的 18 条：C04 C05 C06 C11 C12 C13 C14 C16 C18 C18b C18c C18d C19b C19c C19d C19e C20 C20b。
 - **0.21.3+ 为什么不用变体**：主锚直接命中。`--status`（1.x）里一条 `[0.21.0]` 标记都不该出现。
+- **Windows 实机怎么验**：`.\windows-smoke.ps1`（任意 Windows 机器/VM），或推上去让
+  `.github/workflows/windows.yml` 在 GitHub 的 `windows-latest` 上跑 —— 跑绿了就把
+  「Windows 实机未跑」改成「已实测」。macOS 上的 Docker **跑不了 Windows 容器**
+  （Docker Desktop 在 macOS 上只有 Linux VM，Windows 容器需要 Windows 内核）。
 - **Linux 没有列**：一次都没跑过。平台分支只有 `lib/v2/platform.js` 的 `isWin` 和 `lib/core.js` 查 PATH 时的扩展名，按代码看应该能跑 —— 但「看着能跑」不算实测，所以不写进表。
 - 「已实测」指的是**补丁层**（status / apply / verify / doctor / revert）。模型层的效力数字在「实测数据」一节，那是另一回事。
 - 对账一句：本文「已知局限」里写的「macOS 与 Windows 都实测过」，指的正是这张表 —— **Windows 那两格是 CRLF 树闭环，不是 Windows 实机整机流程**。两处说法不冲突，但别把前者读成后者。

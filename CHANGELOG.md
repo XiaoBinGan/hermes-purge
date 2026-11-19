@@ -5,6 +5,16 @@
 `judge()` 决定「这份产物算不算合格」。它一旦把正经答案判成拒答，`hp` 就白烧一轮采样、
 还把已经拿到的好答案丢掉。这类错误跑模型发现不了（输出随机），只能拿固定样本量量。
 
+### 新增（Windows 真机验证通道）
+
+- `.github/workflows/windows.yml`：在 GitHub Actions 的 **windows-latest（Windows Server 2022）**
+  上跑 `smoke / v2 / dsh / setup / bench`、`package`、`install.ps1` 真装真跑、假 Hermes 树上的
+  `setup --dry` 与非交互拒绝、`uninstall`、CRLF 保真；node 20 / 22 两档。
+  为什么要它：macOS 上只能做到「CRLF 树 = Windows 语义」，容器也不顶事
+  （macOS 的 Docker 只能跑 Linux 容器，Windows 容器需要 Windows 内核）。
+- `windows-smoke.ps1`：同样的检查打包成一条命令，任何 Windows 机器/VM 上直接跑
+  （`.\windows-smoke.ps1`），不需要 GitHub。
+
 ### 修复（数字是 bench 量出来的）
 
 - **裸词匹配 → 开口锚定**：`拒绝 / 抱歉 / 不提供 / I can't` 在正经产物里到处都是
