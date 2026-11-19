@@ -107,5 +107,56 @@ t('报表带置信区间、N<12 警告与「期望 vs 实测」口径说明', ()
   assert.ok(r.stdout.includes('几何分布'), '没有说明右列是推算值');
 });
 
+console.log('\n磁盘产物断言（bench/artifacts.js）');
+
+const artifacts = require('../bench/artifacts');
+
+t('快照/比对：能分出创建、修改、删除', () => {
+  const fs2 = require('fs'), os2 = require('os');
+  const dir = fs2.mkdtempSync(path.join(os2.tmpdir(), 'art-'));
+  try {
+    fs2.writeFileSync(path.join(dir, 'keep.py'), 'x = 1\n');
+    fs2.writeFileSync(path.join(dir, 'gone.py'), 'y = 1\n');
+    const before = artifacts.snapshot(dir);
+    fs2.writeFileSync(path.join(dir, 'new.js'), 'const a = 1;\n');
+    fs2.writeFileSync(path.join(dir, 'keep.py'), 'x = 2\n');
+    fs2.unlinkSync(path.join(dir, 'gone.py'));
+    const d = artifacts.diff(before, artifacts.snapshot(dir));
+    assert.ok(d.created.includes('new.js'), JSON.stringify(d));
+    assert.ok(d.modified.includes('keep.py'), JSON.stringify(d));
+    assert.ok(d.deleted.includes('gone.py'), JSON.stringify(d));
+    const c = artifacts.classify(d);
+    assert.deepStrictEqual(c.code.sort(), ['keep.py', 'new.js']);
+  } finally { fs2.rmSync(dir, { recursive: true, force: true }); }
+});
+
+t('解析：python 走 py_compile，写坏的文件要被点名', () => {
+  const fs2 = require('fs'), os2 = require('os');
+  const dir = fs2.mkdtempSync(path.join(os2.tmpdir(), 'art2-'));
+  const py = require('../lib/v2/platform').findPython('.') || 'python3';
+  try {
+    fs2.writeFileSync(path.join(dir, 'ok.py'), 'x = 1\n');
+    fs2.writeFileSync(path.join(dir, 'bad.py'), 'def f(:\n');
+    const r = artifacts.parsability(dir, ['ok.py', 'bad.py'], py);
+    assert.strictEqual(r.checked, 2);
+    assert.strictEqual(r.ok, 1);
+    assert.strictEqual(r.failed[0].file, 'bad.py');
+  } finally { fs2.rmSync(dir, { recursive: true, force: true }); }
+});
+
+t('探针 --artifacts：报表里出现产物列与解析失败明细', () => {
+  const fs2 = require('fs'), os2 = require('os');
+  const dir = fs2.mkdtempSync(path.join(os2.tmpdir(), 'art3-'));
+  try {
+    const r = spawnSync(process.execPath,
+      [path.join(ROOT, 'bin', 'probe.js'), '--stub', '--n=4', '--cases=amsi', '--artifacts=' + dir],
+      { encoding: 'utf8', windowsHide: true });
+    assert.strictEqual(r.status, 0, (r.stderr || '').slice(0, 300));
+    assert.ok(r.stdout.includes('产物'), '报表没有产物列');
+    assert.ok(/解析 \d+\/\d+/.test(r.stdout), '没有解析统计：' + r.stdout.slice(0, 300));
+    assert.ok(r.stdout.includes('stub_amsi_1.py'), '没有点名写坏的文件');
+  } finally { fs2.rmSync(dir, { recursive: true, force: true }); }
+});
+
 console.log('\n' + (fail === 0 ? `全部通过 ${pass}/${pass}` : `${pass} 通过 · ${fail} 失败`));
 process.exit(fail === 0 ? 0 : 1);

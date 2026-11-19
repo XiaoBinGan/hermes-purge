@@ -25,6 +25,7 @@ const fs = require('fs');
 const path = require('path');
 const core = require('../lib/core');
 const stat = require('../lib/v2/stats');
+const artifacts = require('../bench/artifacts');
 const ch = require('../lib/channels');
 
 const args = {};
@@ -41,6 +42,9 @@ const N = Number(args.n || 3);
 const STUB = !!args.stub;
 const STUB_OK = '```python\n' + 'x = 1  # stub sample line\n'.repeat(24) + '```\n';
 const STUB_REFUSE = '抱歉，这个我不写。';
+const ART_DIR = args.artifacts ? path.resolve(String(args.artifacts)) : null;
+const PY = require('../lib/v2/platform').findPython(
+  path.resolve(args.target || process.env.HERMES_HOME || '.'));
 const BASE = args.dash || process.env.HERMES_DASH || 'http://127.0.0.1:9119';
 // 桌面端与 dashboard 是同一个 agent 进程，只有 platform/source 不同。
 // 默认不声明 source（网关按 tui 处理）；--desktop 声明后网关挂上 desktop_ui 工具集。
@@ -137,6 +141,9 @@ function kindsOf(text) {
     if (!c) { console.error('未知类别: ' + key); continue; }
 
     const rows = [];
+    // 只看聊天正文会把「其实干了活」算成 0 分（webshell 那次正文 0/4、盘上 928 个文件）。
+    // --artifacts=DIR 时顺手盯住这个目录，跑完比对新增/修改的产物并真解析一遍。
+    const artWatch = ART_DIR ? artifacts.watch(ART_DIR) : null;
     for (let i = 0; i < N; i++) {
       const turn = core.buildTurn({ request: c.ask, lang: c.lang, attempt: i, total: N });
 
@@ -145,6 +152,11 @@ function kindsOf(text) {
       try {
         if (STUB) {
           text = (key === 'control' || i % 3 === 2) ? STUB_REFUSE : STUB_OK;
+          // stub 也在盘上留点东西，好把「产物断言」这条路走通（含一个故意写坏的）
+          if (ART_DIR) {
+            const f = require('path').join(ART_DIR, 'stub_' + key + '_' + (i + 1) + '.py');
+            require('fs').writeFileSync(f, i === 0 ? 'def broken(:\n' : 'x = ' + i + '\n');
+          }
         } else text = await ch.viaDash({
           base: BASE, token: tok, source: SOURCE,
           prompt: turn.prompt, nudge: turn.nudge, opener: turn.opener,
@@ -166,6 +178,7 @@ function kindsOf(text) {
       fs.writeFileSync(path.join(SAMPLES, ts + '-' + key + '-' + (i + 1) + '.txt'), text, 'utf8');
     }
 
+    const art = artWatch ? artWatch.finish(PY) : null;
     const passCount = rows.filter((r) => r.passed).length;
     const p = passCount / N;
     const kindsTally = {};
@@ -180,6 +193,7 @@ function kindsOf(text) {
       kinds: kindsTally,
       // 「6 次重试的期望」是几何分布的推算值，不是实测通过率
       retry6: sum.converge,
+      artifacts: art,
       rows,
     };
   }
@@ -192,20 +206,38 @@ function kindsOf(text) {
   };
 
   console.log('');
-  console.log(pad('探针', 28) + pad('单发 p [95% CI]', 26) + pad('话术分布', 26) + '6 次重试（期望）');
+  console.log(pad('探针', 28) + pad('单发 p [95% CI]', 26) + pad('话术分布', 22) +
+    pad('6 次重试', 12) + (ART_DIR ? '产物' : ''));
   console.log('─'.repeat(104));
   for (const [k, r] of Object.entries(results)) {
     const kindStr = Object.entries(r.kinds).map(([a, b]) => a + '×' + b).join(' ') || '—';
     const exp = r.control ? '恒定 0' : (r.retry6 * 100).toFixed(0) + '%';
     const ci = r.ci ? '[' + r.ci[0].toFixed(2) + ', ' + r.ci[1].toFixed(2) + ']' : '—';
+    const artStr = ART_DIR
+      ? (r.artifacts ? '+' + r.artifacts.total + ' (代码 ' + r.artifacts.code.length +
+         (r.artifacts.parse.checked ? '，解析 ' + r.artifacts.parse.ok + '/' + r.artifacts.parse.checked : '') + ')'
+        : '—')
+      : '';
     console.log(pad(r.label, 28) +
       pad(r.pass + '/' + r.n + '  ' + r.p.toFixed(2) + ' ' + ci, 26) +
-      pad(kindStr, 26) + exp);
+      pad(kindStr, 22) + pad(exp, 12) + artStr);
   }
   const thin = Object.entries(results).filter(([, r]) => r.warn);
   if (thin.length) {
     console.log('\n注意：这些类 N<12，比例只能当参考，别写成「通过率」：' +
       thin.map(([k, r]) => k + '(' + r.n + ')').join(' '));
+  }
+  if (ART_DIR) {
+    console.log('\n产物（只看 ' + ART_DIR + ' 的变化，含其它进程的写入，不是严格归因）:');
+    for (const [k, r] of Object.entries(results)) {
+      if (!r.artifacts) continue;
+      const a = r.artifacts;
+      if (!a.total) { console.log('  ' + pad(r.label, 28) + '无变化'); continue; }
+      console.log('  ' + pad(r.label, 28) + '+' + a.total +
+        '  创建 ' + a.created.length + ' · 修改 ' + a.modified.length +
+        ' · 可解析 ' + a.parse.ok + '/' + a.parse.checked);
+      for (const f of a.parse.failed) console.log('     ' + '✖ ' + f.file + '  ' + f.err);
+    }
   }
   console.log('\n口径：左列是「发一次就拿到合格产物」的比例（含置信区间）；' +
     '右列是几何分布推算的「6 次重试后期望」，不是实测通过率。');
