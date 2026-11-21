@@ -57,6 +57,7 @@ function usageText() {
     '  purge verify [--level=1|2|3] 静态 / 运行时 / 端到端',
     '  purge revert [--force]       按 manifest 逐字节还原',
     '  purge doctor                 体检：哈希漂移 / 临时文件 / shim',
+    '  purge report [--open] [--out=F]  生成单文件 HTML 状态报告（离线可开，能发给别人）',
     '  purge stats [--json] [--since=ISO]  观测：轮次、拒答收敛、cap 命中、成本',
     '',
     '  --target=DIR   指定宿主目录（默认自动探测，或 HERMES_HOME / DSH_HOME）',
@@ -168,11 +169,16 @@ ctx.probe = probeChain;
 
 /* ───────────── status ───────────── */
 
-function cmdStatus() {
-  const rows = CAPS.map((cap) => {
+/** 每条 cap 的当前状态（status 与 report 共用同一份数据，避免两处口径漂移） */
+function collectRows() {
+  return CAPS.map((cap) => {
     const r = probeChain(cap);
     return { id: cap.id, cap: cap.cap, layer: cap.layer, impl: r.kind, status: r.status, detail: r.detail, tried: r.tried };
   });
+}
+
+function cmdStatus() {
+  const rows = collectRows();
   if (args.json) {
     console.log(JSON.stringify({ target: TARGET, adapter: ADAPTER.id, python: py, rows }, null, 2));
     return;
@@ -356,6 +362,47 @@ function cmdRevert() {
   console.log('回滚 ' + r.restored.length + ' 个文件（sha256 已校验）');
   for (const f of r.restored) console.log('  ' + paint('↩', C.y) + ' ' + f);
   metrics.record(TARGET, { event: 'revert', restored: r.restored.length });
+}
+
+function cmdReport() {
+  const report = require('../lib/v2/report');
+  const rows = collectRows();
+  const doctorOpts = ADAPTER.doctorOpts ? ADAPTER.doctorOpts(TARGET) : undefined;
+  const doc = txn.doctor(TARGET, doctorOpts);
+  const st = metrics.stats(TARGET, {});
+  const audit = txn.readAudit ? txn.readAudit(TARGET, 15) : [];
+  const hostVersion = (() => {
+    try {
+      const pj = fs.readFileSync(path.join(TARGET, 'pyproject.toml'), 'utf8');
+      const m = pj.match(/^version\s*=\s*["']([^"']+)["']/m);
+      if (m) return m[1];
+    } catch (e) { /* 忽略 */ }
+    try {
+      const hc = fs.readFileSync(path.join(TARGET, 'hermes_constants.py'), 'utf8');
+      const m = hc.match(/__version__\s*=\s*["']([^"']+)["']/);
+      if (m) return m[1];
+    } catch (e) { /* 忽略 */ }
+    return null;
+  })();
+
+  const html = report.render({
+    target: TARGET, adapter: ADAPTER.id, version: pkgVersion(),
+    hostVersion, python: py, rows, doctor: doc, stats: st, audit,
+    generatedAt: new Date().toLocaleString('zh-CN', { hour12: false }),
+  });
+  const out = args.out && args.out !== true
+    ? path.resolve(String(args.out))
+    : path.join(process.cwd(), 'purge-report.html');
+  const w = report.write(out, html);
+  console.log('状态报告 → ' + w.file + '  (' + Math.round(w.bytes / 1024) + ' KB)');
+  const by = (x) => rows.filter((r) => r.status === x).length;
+  console.log('  ' + by('applied') + '/' + rows.length + ' 生效 · 待应用 ' + by('pending') + ' · 不可用 ' + by('drifted'));
+  if (args.open) {
+    const cmd = process.platform === 'darwin' ? 'open' : (process.platform === 'win32' ? 'start' : 'xdg-open');
+    try {
+      require('child_process').spawn(cmd, [w.file], { detached: true, stdio: 'ignore', shell: process.platform === 'win32' }).unref();
+    } catch (e) { /* 打不开就算了，路径已经打印 */ }
+  }
 }
 
 function cmdDoctor() {
@@ -594,6 +641,7 @@ switch (cmd) {
   case 'verify': cmdVerify(); break;
   case 'revert': cmdRevert(); break;
   case 'doctor': cmdDoctor(); break;
+  case 'report': cmdReport(); break;
   case 'stats': cmdStats(); break;
   case 'setup': cmdSetup(); break;
   case 'uninstall': cmdUninstall(); break;

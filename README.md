@@ -10,7 +10,7 @@
 对 Hermes Agent 做三层清洗：**提示词人格 / config 审批策略 / 代码层审批门与黑名单**。
 附一个破甲执行器和一个效力边界探针。
 
-补丁主锚验证于 **Hermes 0.21.3**，**0.21.0 全量兼容**（走变体）。当前版本 **2.5.0**（31 条 cap，四层落地；一条命令安装；判别器误杀率 0%）。
+补丁主锚验证于 **Hermes 0.21.3**，**0.21.0 全量兼容**（走变体）。当前版本 **2.6.0**（31 条 cap，四层落地；一条命令安装；判别器误杀率 0%）。
 
 ---
 
@@ -525,13 +525,18 @@ opener 拼接去重、路径解析、补丁清单完整性。
 node bin/purge.js status          # 每条 cap 当前走哪层实现（[ast] / [shim] / [text]）
 node bin/purge.js apply           # 事务式应用：快照 → 写 → L1 校验
 node bin/purge.js verify          # L1 静态 + L2 行为断言（默认）/ --level=3 端到端
-node bin/purge.js doctor          # 哈希漂移 / 临时文件 / shim 一致性
+node bin/purge.js doctor          # 哈希漂移 / 临时文件 / shim
+node bin/purge.js report --open   # 生成单文件 HTML 状态报告（离线可开，能发给别人） 一致性
 node bin/purge.js revert          # 按 manifest 逐字节还原（手改过就拒绝覆盖）
 node bin/purge.js stats           # 轮次 / 拒答收敛 / 重采样均值 / cap 命中 / tokens 成本（--json 可机读）
 
 # 宿主解耦后：同一套命令，换 adapter 就能跑另一个宿主
 node bin/purge.js status --adapter=dsh --target=/path/to/dsh-home
 ```
+
+**怎么「一眼看到开没开」**：`purge report` 出一张离线 HTML（结论 + 生效比例 + 每条能力走哪层 +
+健康检查 + 最近动作）；`hp` 每次执行前会在 stderr 打一行
+`[purge 已开启 · 源码层 ✓ · 运行时层 ✓ · 上次应用 …]`，没装则是 `[purge 未开启 …]`。
 
 **为什么 shim 层值得存在**：在一棵**完全未修改**的 Hermes 树上只装 shim，运行时就已经是
 `_YOLO_MODE_FROZEN=True`、`is_approval_bypass_active()=True`、`detect_hardline_command()=(False, '')`。

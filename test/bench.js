@@ -160,5 +160,51 @@ t('探针 --artifacts：报表里出现产物列与解析失败明细', () => {
   } finally { fs2.rmSync(dir, { recursive: true, force: true }); }
 });
 
+console.log('\n状态报告与徽标');
+
+t('report.render 产出单文件 HTML，含结论/时间/回滚提示', () => {
+  const report = require('../lib/v2/report');
+  const d = {
+    target: '/tmp/x', adapter: 'hermes', version: '9.9.9', hostVersion: '0.21.0',
+    generatedAt: '2026-01-01 00:00:00',
+    rows: [
+      { id: 'C01', cap: 'approval.yolo_frozen', layer: 'code', impl: 'ast', status: 'applied', detail: '' },
+      { id: 'C13', cap: 'prompt.system_to_user', layer: 'code', impl: 'text', status: 'pending', detail: '' },
+    ],
+    doctor: { checks: [{ name: '文件哈希', ok: true, detail: '一致' }] },
+    stats: { turns: 3, refusalHits: 1 },
+    audit: [{ at: '2026-01-01T00:00:00Z', event: 'apply', changed: 5 }],
+  };
+  const html = report.render(d);
+  assert.ok(html.startsWith('<!doctype html>'), '不是 HTML');
+  assert.ok(html.includes('部分生效'), '没给出结论');
+  assert.ok(html.includes('1/2'), '没显示生效比例：' + html.slice(0, 200));
+  assert.ok(html.includes('purge revert'), '没写回滚命令');
+  assert.ok(html.includes('2026-01-01 00:00:00'), '没写生成时间');
+  assert.ok(html.includes('approval.yolo_frozen'), '没列能力');
+  assert.ok(!/<script/i.test(html), '不该有脚本（离线单文件）');
+});
+
+t('report 对空数据不炸（n/a 而不是编数）', () => {
+  const report = require('../lib/v2/report');
+  const html = report.render({ target: '/x', adapter: 'hermes', version: '1', rows: [], doctor: { checks: [] }, stats: {}, audit: [] });
+  assert.ok(html.includes('未开启'), '空数据应判未开启');
+  assert.ok(html.includes('n/a'), '空数据应显示 n/a');
+});
+
+t('hp 徽标：打开开关后能看到「已开启 / 未开启」', () => {
+  const fs2 = require('fs'), os2 = require('os');
+  const dir = fs2.mkdtempSync(path.join(os2.tmpdir(), 'badge-'));
+  try {
+    fs2.mkdirSync(path.join(dir, 'hermes-agent', 'hermes_cli'), { recursive: true });
+    fs2.mkdirSync(path.join(dir, 'hermes-agent', 'agent'), { recursive: true });
+    fs2.writeFileSync(path.join(dir, 'config.yaml'), 'model:\n  default: fake\n');
+    // 假宿主没有可用 config，hp 会在配置检查处退出 3；徽标在退出之前打印
+    const r = spawnSync(process.execPath, [path.join(ROOT, 'bin', 'hp.js'), '--home=' + dir, '随便问一句'],
+      { encoding: 'utf8', windowsHide: true, env: Object.assign({}, process.env, { HERMES_PURGE_BADGE: '1', HERMES_DASH: 'http://127.0.0.1:1' }) });
+    assert.ok(/\[purge 未开启/.test(r.stderr), '徽标没出现：' + (r.stderr || '').slice(0, 300));
+  } finally { fs2.rmSync(dir, { recursive: true, force: true }); }
+});
+
 console.log('\n' + (fail === 0 ? `全部通过 ${pass}/${pass}` : `${pass} 通过 · ${fail} 失败`));
 process.exit(fail === 0 ? 0 : 1);

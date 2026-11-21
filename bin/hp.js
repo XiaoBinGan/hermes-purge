@@ -55,6 +55,31 @@ const DASH = process.env.HERMES_DASH || 'http://127.0.0.1:9119';
     process.exit(3);
   }
 
+  // 一行徽标：先回答「现在到底开没开」，省得去翻 status
+  if ((process.stderr.isTTY || process.env.HERMES_PURGE_BADGE === "1") && !flags.quiet) {
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      const platform = require('../lib/v2/platform');
+      const codeRoot = fs.existsSync(path.join(root, 'hermes_cli')) ? root : path.join(root, 'hermes-agent');
+      const srcOn = fs.existsSync(path.join(codeRoot, '.hermes-purge', 'v2', 'latest'));
+      const rtOn = platform.sitePackages(codeRoot)
+        .some((sp) => fs.existsSync(path.join(sp, '_hermes_purge.pth')));
+      let when = '';
+      try {
+        const id = fs.readFileSync(path.join(codeRoot, '.hermes-purge', 'v2', 'latest'), 'utf8').trim();
+        const man = JSON.parse(fs.readFileSync(path.join(codeRoot, '.hermes-purge', 'v2', 'snap', id, 'manifest.json'), 'utf8'));
+        const t = new Date(man.finishedAt || man.startedAt);
+        when = (t.getMonth() + 1) + '-' + t.getDate() + ' ' +
+          String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0');
+      } catch (e) { /* 拿不到就不写时间 */ }
+      const tag = srcOn || rtOn ? '已开启' : '未开启';
+      const parts = ['源码层 ' + (srcOn ? '✓' : '✗'), '运行时层 ' + (rtOn ? '✓' : '✗')];
+      if (when) parts.push('上次应用 ' + when);
+      process.stderr.write('[purge ' + tag + ' · ' + parts.join(' · ') + ']\n');
+    } catch (e) { /* 徽标失败不影响主流程 */ }
+  }
+
   const lang = flags.lang || core.pickLang(REQUEST);
   const mode = core.pickMode(REQUEST, lang);
   // plain 模式（普通问答）只发一次，不注入、不重试
