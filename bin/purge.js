@@ -221,7 +221,9 @@ function cmdApply() {
   console.log(C.b + (dry ? '[dry] 预演' : '应用') + C.reset + ' → ' + TARGET);
   console.log(C.dim + '事务文件 ' + rels.size + ' 个；' + ADAPTER.host.label + '=' + (py || '(无)') + C.reset + '\n');
 
-  const snap = dry ? null : txn.begin(TARGET, [...rels]);
+  const VOLATILE_RE = /(^|\/)config\.ya?ml$|(^|\/)\.env$/;
+  const volatile = [...rels].filter((r) => VOLATILE_RE.test(r));
+  const snap = dry ? null : txn.begin(TARGET, [...rels], { volatile });
   let changed = 0, skipped = 0, failed = 0;
 
   try {
@@ -360,6 +362,10 @@ function cmdRevert() {
     }
     process.exitCode = 1;
     return;
+  }
+  if (r.skipped && r.skipped.length) {
+    console.log(paint('跳过 ' + r.skipped.length + ' 个配置文件（归宿主所有，保留现状）', C.y) + '：' + r.skipped.join(', '));
+    console.log(C.dim + '  要连配置一起回滚：purge revert --force' + C.reset);
   }
   console.log('回滚 ' + r.restored.length + ' 个文件（sha256 已校验）');
   for (const f of r.restored) console.log('  ' + paint('↩', C.y) + ' ' + f);
@@ -528,6 +534,17 @@ function cmdDoctor() {
   for (const c of rep.checks) {
     console.log('  ' + (c.ok ? paint('✔', C.g) : paint('✖', C.r)) + ' ' + c.name.padEnd(16) + ' ' + C.dim + c.detail + C.reset);
   }
+  // 配置文件的哈希一定会被宿主改（它会重写序列化），所以单独看语义：直接跑配置层 cap
+  const cfgCaps = CAPS.filter((cap) => cap.layer === 'config');
+  if (cfgCaps.length) {
+    console.log('\n  ' + C.c + '配置语义' + C.reset + C.dim + '（哈希不算数，看键值）' + C.reset);
+    for (const cap of cfgCaps) {
+      const r = probeChain(cap);
+      const tag = r.status === 'applied' ? paint('✔', C.g) : (r.status === 'pending' ? paint('·', C.y) : paint('✖', C.r));
+      console.log('   ' + tag + ' ' + String(cap.id).padEnd(5) + String(cap.cap).padEnd(26) + C.dim + (r.detail || '') + C.reset);
+    }
+  }
+
   const log = ADAPTER.readShimLog ? ADAPTER.readShimLog(TARGET) : [];
   if (log.length) {
     const bad = log.filter((l) => l.ok === false);

@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.9.1 —— 修 doctor 对配置文件的误报（宿主机重写 config.yaml 是常态）
+
+现象：面板/CLI 里 `✖ 文件哈希 被外部改过：../config.yaml`，但 `purge status` 仍是 31/31。
+
+根因：**Hermes 自己会重写 `config.yaml` 的序列化**（换行折行、键顺序、注释被去掉），内容语义不变。
+实测 diff 只差折行位置与 `# [hermes-purge]` 注释，`prefill_messages_file` / `max_tokens` /
+`approvals` 三个键值都还是我们写的那样。拿哈希去判「是否被外部改过」对这类宿主自有文件是错的判据。
+
+修法：
+
+- `config.yaml` / `.env` 在事务里标成 **volatile**（老 manifest 按路径兜底识别），
+  `doctor` 把它们单列成「配置文件重写」提示（✔ 不算异常），代码文件才参与哈希判定
+- `doctor` 新增「配置语义」块：直接跑配置层 4 条 cap 的探测，看键值不看哈希
+  （`max_tokens: 16000` / `prefill_messages.json` / `mode: off, timeout 86400` / 环境变量）
+- `revert` 默认**跳过**配置文件（归宿主所有，不覆盖），要连配置一起回滚得 `--force`，
+  跳过时会明确打印
+
 ## 2.9.0 —— 侧边栏判定改准（按 ul>li 结构 + gap-px 打分）
 
 第一版用「左侧、窄、竖排、≥3 项」的几何启发式找容器，真机上打印
