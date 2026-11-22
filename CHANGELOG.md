@@ -1,5 +1,26 @@
 # Changelog
 
+## 3.0.3 —— Windows 真机跑通（Win11 ARM / VirtualBox），修 4 处只有真机会暴露的问题
+
+在真机 Win11 ARM（build 26300 / Node 22.11.0 / VirtualBox 7.2.22）上跑 `windows-smoke.ps1`，
+一路从 `SMOKE_EXIT=1` 修到 **`SMOKE_EXIT=0`**：
+
+1. **`.ps1` 缺 UTF-8 BOM**：Windows PowerShell 5.1 按 ANSI 解码中文注释，直接把后面代码吃进字符串，
+   报 `An expression was expected after '('` / `The string is missing the terminator`。
+   → `windows-smoke.ps1`、`install.ps1` 都加 BOM（保持 CRLF）。
+2. **PS 5.1 吃掉原生参数里的双引号**：`node -p '…split(".")[0]'` 到 node 手里变成 `split(.)[0]` → SyntaxError。
+   → 改成 `node -v` 字符串解析；版本一致性检查改用 `Get-Content | ConvertFrom-Json`。
+3. **管道提前关闭掐死 node**：`node … | Select-Object -First 6` 让 `$LASTEXITCODE` 变成 -1。
+   → 先取全部输出到变量，再挑前几行打印。
+4. **同长度改写检测不到**：NTFS 的 mtime 粒度粗 + 文件长度不变时，`size/mtime` 比对看不出变化。
+   → `bench/artifacts.js` 对小文件（≤4MB）加 sha256，diff 优先比哈希。
+
+另外：`python` 在 Windows 上变成**可选项**（没装就跳过 AST/埋点/部分 bench，不算失败并明确说明）；
+控制台输出统一 `UTF-8`，cmd 里中文不再乱码；`probe --stub` 的产物样本改用坏掉的 `.js`（`node --check` 到处都有）。
+
+真机结果：单元 41/22/33/12/16（22 是跳过 python 相关 8 项后的数）、npm 打包 16/16、
+`install.ps1` + `purge setup --dry` + 非交互拒绝 + `uninstall` + CRLF 保真 全 OK。
+
 ## 3.0.2 —— 手表是 codicon，不是 svg
 
 用户贴了真实节点，问题清楚了：图标有两种形式 ——

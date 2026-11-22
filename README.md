@@ -10,7 +10,7 @@
 对 Hermes Agent 做三层清洗：**提示词人格 / config 审批策略 / 代码层审批门与黑名单**。
 附一个破甲执行器和一个效力边界探针。
 
-补丁主锚验证于 **Hermes 0.21.3**，**0.21.0 全量兼容**（走变体）。当前版本 **3.0.2**（31 条 cap，四层落地；一条命令安装；判别器误杀率 0%）。
+补丁主锚验证于 **Hermes 0.21.3**，**0.21.0 全量兼容**（走变体）。当前版本 **3.0.3**（31 条 cap，四层落地；一条命令安装；判别器误杀率 0%）。
 
 ---
 
@@ -301,11 +301,16 @@ npm rm -g hermes-purge
 | Hermes 版本 | 落地路径 | macOS | Windows |
 |---|---|---|---|
 | 0.21.0 | 主锚不成立，走 **18 条变体** | **已实测** —— `~/.hermes/hermes-agent`，宿主 python 3.11；`status` applied 31 / pending 0 / drifted 0，`doctor` 健康，L2 14 项全绿 | **未实测** |
-| 0.21.3 | 主锚，0 处变体 | **未实测** | **已实测** —— CRLF 树闭环（`apply → verify → doctor → revert`）；**Windows 实机未跑** |
-| 0.21.4 | 主锚，0 处变体 | **未实测** | **已实测** —— 与 0.21.3 同一布局，走主锚（依据 CHANGELOG 2.0.0 的兼容段）；**Windows 实机未跑** |
+| 0.21.3 | 主锚，0 处变体 | **未实测** | **已实测** —— CRLF 树闭环；另在 **Win11 ARM 真机**上跑通补丁层工具链（见下） |
+| 0.21.4 | 主锚，0 处变体 | **未实测** | **已实测** —— 与 0.21.3 同一布局，走主锚；同上 |
 
 - **0.21.0 为什么走变体**：0.21.2/0.21.3 才做的模块拆分（`approval_context` / `approval_detection` / `turn_stop_gates` / `stream_delivery` / `turn_request_assembly`）。0.21.0 里这些函数还在 `tools/approval.py`、`agent/conversation_loop.py`、`run_agent.py`。走变体的 18 条：C04 C05 C06 C11 C12 C13 C14 C16 C18 C18b C18c C18d C19b C19c C19d C19e C20 C20b。
 - **0.21.3+ 为什么不用变体**：主锚直接命中。`--status`（1.x）里一条 `[0.21.0]` 标记都不该出现。
+- **Windows 实机已验**（2026-11-23，VirtualBox 7.2.22 / Windows 11 ARM 26H1 build 26300 / Node v22.11.0）：
+  `windows-smoke.ps1` 全绿（`SMOKE_EXIT=0`）—— 单元测试 41/22/33/12/16、npm 打包自检 16/16、
+  `install.ps1` 装完 `purge --version` 可跑、`purge setup --dry` 与非交互拒绝、`uninstall`、CRLF 保真。
+  **注意**：该 guest 未装 Python，所以 AST 层（5 项）、埋点（1 项）与部分 bench 用例按设计跳过；
+  Python 相关路径的 Windows 行为仍属未实测。
 - **Windows 实机怎么验**：`.\windows-smoke.ps1`（任意 Windows 机器/VM），或推上去让
   `.github/workflows/windows.yml` 在 GitHub 的 `windows-latest` 上跑 —— 跑绿了就把
   「Windows 实机未跑」改成「已实测」。macOS 上的 Docker **跑不了 Windows 容器**
