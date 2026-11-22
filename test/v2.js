@@ -347,8 +347,10 @@ if (!turnRun) {
 } else {
   t('turn 钩子：跑一轮就落一条记录，字段齐全', () => {
     const { r, rows } = turnRun;
-    assert.strictEqual(r.status, 0, (r.stderr || '').trim().split('\n').slice(-3).join(' | '));
-    assert.strictEqual(rows.length, 4, '记录数 ' + rows.length + ' · ' + (r.stderr || '').slice(-200));
+    // 失败时把完整 stderr 带出来：Windows 上的 python 报错只留最后三行根本不够定位
+    const diag = '\n--- stdout ---\n' + (r.stdout || '').slice(-800) + '\n--- stderr ---\n' + (r.stderr || '').slice(-2000);
+    assert.strictEqual(r.status, 0, diag);
+    assert.strictEqual(rows.length, 4, '记录数 ' + rows.length + diag);
     const rec = rows[0];
     for (const k of ['ts', 'surface', 'model', 'turn', 'refusals', 'approval', 'tokens', 'ok']) {
       assert.ok(Object.prototype.hasOwnProperty.call(rec, k), '缺字段 ' + k);
