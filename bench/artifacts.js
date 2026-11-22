@@ -20,7 +20,17 @@
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { spawnSync } = require('child_process');
+
+// 小文件算内容哈希：Windows 上 mtime 粒度粗 + 同长度改写时，size/mtime 都看不出变化
+const HASH_LIMIT = 4 * 1024 * 1024;
+function fileHash(file, size) {
+  try {
+    if (size > HASH_LIMIT) return null;
+    return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex').slice(0, 32);
+  } catch (e) { return null; }
+}
 
 const SKIP = new Set(['.git', 'node_modules', '__pycache__', '.venv', 'venv', '.mypy_cache', '.pytest_cache']);
 
@@ -41,7 +51,9 @@ function snapshot(dir, opts) {
       if (!ent.isFile()) continue;
       try {
         const st = fs.statSync(path.join(base, r));
-        out[r.split(path.sep).join('/')] = { size: st.size, mtimeMs: st.mtimeMs };
+        out[r.split(path.sep).join('/')] = {
+          size: st.size, mtimeMs: st.mtimeMs, hash: fileHash(path.join(base, r), st.size),
+        };
       } catch (e) { /* 忽略读不到的 */ }
       if (Object.keys(out).length >= max) return;
     }
@@ -57,7 +69,7 @@ function diff(before, after) {
   for (const [k, v] of Object.entries(after)) {
     const b = before[k];
     if (!b) created.push(k);
-    else if (b.size !== v.size || b.mtimeMs !== v.mtimeMs) modified.push(k);
+    else if (b.hash && v.hash ? b.hash !== v.hash : (b.size !== v.size || b.mtimeMs !== v.mtimeMs)) modified.push(k);
   }
   for (const k of Object.keys(before)) if (!after[k]) deleted.push(k);
   return { created, modified, deleted };

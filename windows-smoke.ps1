@@ -63,10 +63,13 @@ try {
     New-Item -ItemType Directory -Force -Path (Join-Path $tree 'hermes_cli'), (Join-Path $tree 'agent') | Out-Null
     Set-Content -Path (Join-Path $tmp 'config.yaml') -Value "model:`n  default: fake"
     Set-Content -Path (Join-Path $tmp 'SOUL.md') -Value 'fake'
-    node bin/purge.js setup --dry --target=$tree | Select-Object -First 6 | Out-Host
-    if ($LASTEXITCODE -ne 0) { throw "setup --dry 退出码 $LASTEXITCODE" }
+    # 注意：不要 `node ... | Select-Object -First N` —— 管道被提前关闭会把 node 掐掉，退出码头 -1
+    $dryOut = & node bin/purge.js setup --dry --target=$tree 2>&1
+    $dryCode = $LASTEXITCODE
+    $dryOut | Select-Object -First 6 | ForEach-Object { Write-Host $_ }
+    if ($dryCode -ne 0) { throw "setup --dry 退出码 $dryCode" }
 
-    $out = node bin/purge.js setup --target=$tree 2>&1 | Out-String
+    $out = (node bin/purge.js setup --target=$tree 2>&1 | Out-String)
     if ($LASTEXITCODE -ne 1) { throw "无 --yes 时应退出 1，实际 $LASTEXITCODE`n$out" }
     if ($out -notmatch '--yes') { throw "没提示 --yes：`n$out" }
 
