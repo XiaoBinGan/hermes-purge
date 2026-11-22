@@ -59,6 +59,7 @@ function usageText() {
     '  purge doctor                 体检：哈希漂移 / 临时文件 / shim',
     '  purge report [--open] [--out=F]  生成单文件 HTML 状态报告（离线可开，能发给别人）',
     '  purge plugin [install|uninstall|status]  装一个 Hermes 插件：/purge 命令 + purge_status 工具',
+    '  purge desktop [install|sync|uninstall|status]  在桌面端侧边栏加一个「hermes-purge 状态」入口',
     '  purge stats [--json] [--since=ISO]  观测：轮次、拒答收敛、cap 命中、成本',
     '',
     '  --target=DIR   指定宿主目录（默认自动探测，或 HERMES_HOME / DSH_HOME）',
@@ -423,7 +424,8 @@ function cmdPlugin() {
   }
 }
 
-function cmdReport() {
+/** 生成报告 HTML 与元数据（report / desktop 共用） */
+function buildReportHtml() {
   const report = require('../lib/v2/report');
   const rows = collectRows();
   const doctorOpts = ADAPTER.doctorOpts ? ADAPTER.doctorOpts(TARGET) : undefined;
@@ -443,24 +445,79 @@ function cmdReport() {
     } catch (e) { /* 忽略 */ }
     return null;
   })();
-
+  const generatedAt = new Date().toLocaleString('zh-CN', { hour12: false });
   const html = report.render({
     target: TARGET, adapter: ADAPTER.id, version: pkgVersion(),
-    hostVersion, python: py, rows, doctor: doc, stats: st, audit,
-    generatedAt: new Date().toLocaleString('zh-CN', { hour12: false }),
+    hostVersion, python: py, rows, doctor: doc, stats: st, audit, generatedAt,
   });
+  return { html, rows, generatedAt };
+}
+
+function cmdReport() {
+  const { html, rows, generatedAt } = buildReportHtml();
   const out = args.out && args.out !== true
     ? path.resolve(String(args.out))
     : path.join(process.cwd(), 'purge-report.html');
-  const w = report.write(out, html);
-  console.log('状态报告 → ' + w.file + '  (' + Math.round(w.bytes / 1024) + ' KB)');
+  fs.mkdirSync(path.dirname(out), { recursive: true });
+  fs.writeFileSync(out, html, 'utf8');
+  console.log('状态报告 → ' + out + '  (' + Math.round(Buffer.byteLength(html) / 1024) + ' KB · ' + generatedAt + ')');
   const by = (x) => rows.filter((r) => r.status === x).length;
   console.log('  ' + by('applied') + '/' + rows.length + ' 生效 · 待应用 ' + by('pending') + ' · 不可用 ' + by('drifted'));
   if (args.open) {
     const cmd = process.platform === 'darwin' ? 'open' : (process.platform === 'win32' ? 'start' : 'xdg-open');
     try {
-      require('child_process').spawn(cmd, [w.file], { detached: true, stdio: 'ignore', shell: process.platform === 'win32' }).unref();
+      require('child_process').spawn(cmd, [out], { detached: true, stdio: 'ignore', shell: process.platform === 'win32' }).unref();
     } catch (e) { /* 打不开就算了，路径已经打印 */ }
+  }
+}
+
+/* ───────────── 桌面端面板（DOM 注入，可还原）───────────── */
+
+function cmdDesktop() {
+  const desktop = require('../lib/v2/desktop');
+  const sub = args._[1] || 'status';
+  const dists = args.dist ? [path.resolve(String(args.dist))] : desktop.findDists(TARGET);
+
+  if (!dists.length) {
+    console.error('找不到桌面端 renderer（apps/desktop/dist 或 release/*/…/app.asar.unpacked/dist）');
+    console.error('先把 Hermes 桌面端装好，或用 --dist=DIR 指定。');
+    process.exitCode = 1;
+    return;
+  }
+
+  if (sub === 'install' || sub === 'sync') {
+    const { html, generatedAt } = buildReportHtml();
+    for (const d of dists) {
+      if (sub === 'install') {
+        desktop.install(d, { report: html, version: pkgVersion(), generatedAt });
+        console.log('已挂到桌面端 → ' + d);
+      } else {
+        const r = desktop.sync(d, { report: html, version: pkgVersion(), generatedAt });
+        console.log((r.ok ? '已刷新快照 → ' : '未安装，先 install → ') + d);
+      }
+    }
+    if (sub === 'install') {
+      console.log('\n重启 Hermes 桌面端后，侧边栏「定时任务」下面会多一个入口（hermes-purge 状态）。');
+      console.log('撤销：purge desktop uninstall');
+    }
+    return;
+  }
+
+  if (sub === 'uninstall') {
+    for (const d of dists) {
+      const r = desktop.uninstall(d);
+      console.log((r.removed.length ? '已还原：' + r.removed.join(' / ') + '  ' : '没有可还原的内容  ') + d);
+    }
+    console.log('重启桌面端生效。');
+    return;
+  }
+
+  // status
+  for (const d of dists) {
+    const st = desktop.status(d);
+    console.log(d);
+    console.log('  面板    ' + (st.installed ? '已安装' : '未安装'));
+    console.log('  备份    ' + (st.hasBackup ? '有（可 uninstall 还原）' : '无'));
   }
 }
 
@@ -702,6 +759,7 @@ switch (cmd) {
   case 'doctor': cmdDoctor(); break;
   case 'report': cmdReport(); break;
   case 'plugin': cmdPlugin(); break;
+  case 'desktop': cmdDesktop(); break;
   case 'stats': cmdStats(); break;
   case 'setup': cmdSetup(); break;
   case 'uninstall': cmdUninstall(); break;

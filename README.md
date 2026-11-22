@@ -10,7 +10,7 @@
 对 Hermes Agent 做三层清洗：**提示词人格 / config 审批策略 / 代码层审批门与黑名单**。
 附一个破甲执行器和一个效力边界探针。
 
-补丁主锚验证于 **Hermes 0.21.3**，**0.21.0 全量兼容**（走变体）。当前版本 **2.7.0**（31 条 cap，四层落地；一条命令安装；判别器误杀率 0%）。
+补丁主锚验证于 **Hermes 0.21.3**，**0.21.0 全量兼容**（走变体）。当前版本 **2.8.0**（31 条 cap，四层落地；一条命令安装；判别器误杀率 0%）。
 
 ---
 
@@ -533,6 +533,17 @@ node bin/purge.js stats           # 轮次 / 拒答收敛 / 重采样均值 / ca
 # 宿主解耦后：同一套命令，换 adapter 就能跑另一个宿主
 node bin/purge.js status --adapter=dsh --target=/path/to/dsh-home
 ```
+
+**桌面端侧边栏入口**（和「定时任务」并排，可还原）：
+
+```bash
+purge desktop install     # 备份 index.html + 注入 purge-panel.js，重启桌面端生效
+purge desktop sync        # 刷新面板里的状态快照
+purge desktop uninstall   # 逐字节还原
+```
+
+> 桌面 SPA 没有 UI 扩展点，所以这条走的是「index.html 加一行 script + DOM 注入」，
+> 不是编译进 bundle：命令面板里不会出现、升级后要重跑 install。边界写在 CHANGELOG 里。
 
 **在 Hermes 里直接看**（无损扩展，走官方插件系统）：
 

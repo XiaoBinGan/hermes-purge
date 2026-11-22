@@ -1,5 +1,36 @@
 # Changelog
 
+## 2.8.0 —— 桌面端侧边栏入口：和「定时任务」并排
+
+要求原话：「需要和 Hermes desktop 原生的一样，安装启动完成后直接出现在产物和定时任务的菜单的下一个」。
+
+### 做法与取舍
+
+桌面端是打包好的 React SPA（`app.asar.unpacked/dist`），**没有 UI 扩展点**；插件系统只到工具/命令。
+两条路：
+
+| 方案 | 结果 |
+|---|---|
+| 改源码 + 重新构建 renderer | ❌ 本机缺 `@rolldown/plugin-babel`，`npm run build` 直接失败；且每次 Hermes 升级都要重做 |
+| **往 `index.html` 加一行 `<script>` + DOM 注入** | ✅ 只动一个文件的一行，自带两个文件，可逐字节还原 |
+
+### 新增
+
+- **`purge desktop install|sync|uninstall|status`**：找到 renderer（打包版优先，其次开发构建），
+  备份 `index.html` → 写 `purge-panel.js`（内联最新状态报告）→ 在 `</body>` 前插一行 script。
+- 注入脚本的行为：定位侧边栏（左缘、窄、竖排、≥3 个可点项），取**最后一个**导航项做原型克隆，
+  追加一个入口（源码里 NAV 顺序是 skills→messaging→artifacts→cron，所以正好排在「定时任务」后面）；
+  `MutationObserver` 盯着，React 重渲染把它冲掉就补回来；点击后弹出覆盖层，用 `srcdoc` 渲染报告
+  （不依赖 file:// 权限，离线可用，Esc/点遮罩关闭）。
+- 生成时用 `vm.Script` 做语法自检，宁可报错也不把坏脚本写进宿主 UI。
+
+### 如实标注的边界
+
+- 是 **DOM 注入**，不是编译进 bundle：命令面板/键盘导航里不会出现这个入口
+- Hermes 升级会替换 dist → 需要重跑 `purge desktop install`
+- 面板内容是内联快照，不自动刷新 → `purge desktop sync` 重新生成
+- DOM 注入行为需要重启桌面端人工验收（`test/desktop.js` 只覆盖注入层与还原）
+
 ## 2.7.0 —— 无损扩展进 Hermes：插件 + `/purge` + `purge_status`
 
 用户原话：「这个操作面板不应该启动的时候无损拓展到 Hermes 么」。对，之前的 `purge report`
