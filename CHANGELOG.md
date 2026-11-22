@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.9.0 —— 侧边栏判定改准（按 ul>li 结构 + gap-px 打分）
+
+第一版用「左侧、窄、竖排、≥3 项」的几何启发式找容器，真机上打印
+`[hermes-purge] 还在找侧边栏…` —— 判定没命中。改成按真实 DOM 结构找：
+
+- 导航是 shadcn 的 `SidebarMenu`：`<ul class="…gap-px"><li><button>…`
+- 打分：类名带 `gap-px` 最高分；其次「项数 3..12 且靠左」；会话列表（几十项、无 gap-px）排后面
+- 命中后克隆**整个 `<li>`**（保持列表结构），把 `<button>` 换成我们的入口并追加到末尾
+  —— 源码 NAV 顺序 skills→messaging→artifacts→cron，所以正好在「定时任务」下一位
+- 失败时打印候选 `ul` 清单（tag/class/left/width/items），一次就能定位
+- 用宿主仓库自带的 jsdom 做**真实 DOM 验证**（`test/desktop-dom.js`）：构造「会话列表 + 导航列表」
+  两套竞争，断言注入进的是导航列表、排在最后、点击弹层且 iframe 里有报告
+
 ## 2.8.0 —— 桌面端侧边栏入口：和「定时任务」并排
 
 要求原话：「需要和 Hermes desktop 原生的一样，安装启动完成后直接出现在产物和定时任务的菜单的下一个」。
