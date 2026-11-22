@@ -20,7 +20,7 @@ const html = `<!doctype html><html><body>
       <li><button class="h-7 w-full" aria-label="新建"><svg></svg><span>新建会话</span></button></li>
       <li><button class="h-7 w-full" aria-label="技能"><svg></svg><span>技能</span></button></li>
       <li><button class="h-7 w-full" aria-label="产物"><svg></svg><span>产物</span></button></li>
-      <li><button class="h-7 w-full" aria-label="定时任务"><svg></svg><span>定时任务</span></button></li>
+      <li><button class="h-7 w-full" aria-label="定时任务"><svg class="watch"></svg><span>定时任务</span><svg class="chevron"></svg></button></li>
     </ul>
   </div></aside></body></html>`;
 
@@ -43,6 +43,10 @@ setTimeout(() => {
   if (lis.length !== 5) fail('导航列表项数 ' + lis.length + '（应为 5，说明注错了列表）');
   if (!lis[lis.length - 1].contains(btn)) fail('入口不在最后一项（没有排在「定时任务」后面）');
   if (!/hermes-purge/.test(btn.textContent)) fail('文案没换：' + btn.textContent);
+  // 克隆来的行有两个 svg（手表 + 小箭头），必须全清掉只留飞镖
+  const svgs = btn.querySelectorAll('svg');
+  if (svgs.length !== 1) fail('图标数量 ' + svgs.length + '（应只剩 1 个飞镖，不能残留手表/箭头）');
+  if (/watch|chevron/.test(btn.innerHTML)) fail('残留了克隆来的图标 class：' + btn.innerHTML.slice(0, 160));
   if (btn) {
     btn.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
     const mask = window.document.getElementById('purge-mask');
