@@ -294,8 +294,10 @@ const FAKE_HOST_MOD = [
 // 否则若 PY 指向本机已装的 Hermes venv，它的 site-packages/.pth 会先导入真机
 // 那份 shim（污染真实 .hermes-purge 日志，也不是我们要测的代码）。
 const TURN_DRIVER = [
-  'import importlib.util, sys',
+  'import importlib.util, os, sys',
   'sys.path.insert(0, sys.argv[1])',
+  // Windows 上 `python -S -c` 不保证把 cwd 放进 sys.path，显式加一次（agent 包在 cwd 下）
+  'sys.path.insert(0, os.getcwd())',
   'sys.modules.pop("_hermes_purge_shim", None)',
   'spec = importlib.util.spec_from_file_location("_hermes_purge_shim", sys.argv[2])',
   'mod = importlib.util.module_from_spec(spec)',
