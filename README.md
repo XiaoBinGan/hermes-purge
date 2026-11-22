@@ -10,7 +10,7 @@
 对 Hermes Agent 做三层清洗：**提示词人格 / config 审批策略 / 代码层审批门与黑名单**。
 附一个破甲执行器和一个效力边界探针。
 
-补丁主锚验证于 **Hermes 0.21.3**，**0.21.0 全量兼容**（走变体）。当前版本 **3.0.3**（31 条 cap，四层落地；一条命令安装；判别器误杀率 0%）。
+补丁主锚验证于 **Hermes 0.21.3**，**0.21.0 全量兼容**（走变体）。当前版本 **3.0.4**（31 条 cap，四层落地；一条命令安装；判别器误杀率 0%）。
 
 ---
 
@@ -306,7 +306,11 @@ npm rm -g hermes-purge
 
 - **0.21.0 为什么走变体**：0.21.2/0.21.3 才做的模块拆分（`approval_context` / `approval_detection` / `turn_stop_gates` / `stream_delivery` / `turn_request_assembly`）。0.21.0 里这些函数还在 `tools/approval.py`、`agent/conversation_loop.py`、`run_agent.py`。走变体的 18 条：C04 C05 C06 C11 C12 C13 C14 C16 C18 C18b C18c C18d C19b C19c C19d C19e C20 C20b。
 - **0.21.3+ 为什么不用变体**：主锚直接命中。`--status`（1.x）里一条 `[0.21.0]` 标记都不该出现。
-- **Windows 实机已验**（2026-11-23，VirtualBox 7.2.22 / Windows 11 ARM 26H1 build 26300 / Node v22.11.0）：
+- **Windows 实机全绿**（2026-11-23，VirtualBox 7.2.22 / Win11 ARM 26H1 build 26300 / Node 22.11.0 / Python 3.12.8 embeddable）：
+  `SMOKE_EXIT=0`、**无跳过** —— smoke 41 · v2 30 · dsh 33 · setup 12 · bench 16 · package 16；
+  另外用 pristine 真实源码验证了补丁引擎：`apply` 改写 17 条 → `verify --level=1` → `revert` 后
+  三个文件 SHA256 与原件一致。详见 [`docs/windows-verification.md`](docs/windows-verification.md)。
+- 旧记录（同一台机，未装 Python 时）：
   `windows-smoke.ps1` 全绿（`SMOKE_EXIT=0`）—— 单元测试 41/22/33/12/16、npm 打包自检 16/16、
   `install.ps1` 装完 `purge --version` 可跑、`purge setup --dry` 与非交互拒绝、`uninstall`、CRLF 保真。
   **注意**：该 guest 未装 Python，所以 AST 层（5 项）、埋点（1 项）与部分 bench 用例按设计跳过；

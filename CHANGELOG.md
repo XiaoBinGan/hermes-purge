@@ -1,5 +1,18 @@
 # Changelog
 
+## 3.0.4 —— Windows 真机无跳过全绿 + 引擎验证
+
+在 Win11 ARM 上补装 Python 3.12.8（embeddable），把之前「按设计跳过」的用例全跑起来：
+
+- 工具链：`SMOKE_EXIT=0`，smoke 41 · v2 30 · dsh 33 · setup 12 · bench 16 · package 16，**无跳过**
+- 补丁引擎：用 `git show HEAD:` 取 pristine 的 `tools/approval.py`(5971 行) + `agent/tool_guardrails.py`
+  + `acp_adapter/edit_approval.py` → `apply` 改写 17 条 → `verify --level=1` 通过 →
+  `revert` 后三文件 SHA256 与原件**完全一致**
+- 修掉第 5 个只有真机才暴露的问题：`python -S -c` 在 Windows 上不把 cwd 放进 `sys.path`，
+  埋点驱动 `ModuleNotFoundError: agent` → 驱动显式 `sys.path.insert(0, os.getcwd())`
+- 验证脚本入库：`test/win/run-smoke.ps1`、`test/win/run-engine.ps1`（均带 BOM+CRLF），
+  记录见 `docs/windows-verification.md`
+
 ## 3.0.3 —— Windows 真机跑通（Win11 ARM / VirtualBox），修 4 处只有真机会暴露的问题
 
 在真机 Win11 ARM（build 26300 / Node 22.11.0 / VirtualBox 7.2.22）上跑 `windows-smoke.ps1`，
