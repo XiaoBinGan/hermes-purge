@@ -1,5 +1,28 @@
 # Changelog
 
+## 2.7.0 —— 无损扩展进 Hermes：插件 + `/purge` + `purge_status`
+
+用户原话：「这个操作面板不应该启动的时候无损拓展到 Hermes 么」。对，之前的 `purge report`
+是外挂 CLI。现在改成走 **Hermes 自己的插件系统**（`~/.hermes/plugins/hermes_purge/`），
+不改宿主一行代码，删目录就干净。
+
+### 新增
+
+- **`purge plugin install|uninstall|status`**：把插件模板写进 `$HERMES_HOME/plugins/hermes_purge/`
+  （`plugin.yaml` + `__init__.py` + `path.json` 记录 CLI 绝对路径），幂等、可逆。
+- 插件注册两件事：
+  - `/purge [status|report|doctor|stats]` 会话内斜杠命令
+  - `purge_status` 工具（schema 空对象、只读）—— 让 agent 自己回答「补丁开着吗」
+- 插件内部把 `purge status --json` 拉过来做摘要（5s 缓存、25s 超时、剥 ANSI），
+  拿不到 CLI 时给一句人话而不是抛栈。
+
+### 验证
+
+- `hermes plugins list` 能看到 `hermes_purge`（source=user）；`hermes plugins enable hermes_purge` 后
+  `hermes plugins doctor hermes_purge` → **OK: runtime discovery, manifest parsing, import, and registration passed**（1 tool）
+- `test/plugin.js` 10 项：install/uninstall 可逆、按 Hermes 方式 importlib 导入、
+  register 真的注册了命令与工具、有/无 CLI 两种情况下的人话分支
+
 ## 2.6.0 —— 可视化状态：`purge report` + `hp` 状态徽标
 
 问题：补丁开着的时候没人知道它开着，用 Hermes 时没有「一眼可见」的信号。

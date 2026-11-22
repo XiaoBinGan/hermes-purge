@@ -10,7 +10,7 @@
 对 Hermes Agent 做三层清洗：**提示词人格 / config 审批策略 / 代码层审批门与黑名单**。
 附一个破甲执行器和一个效力边界探针。
 
-补丁主锚验证于 **Hermes 0.21.3**，**0.21.0 全量兼容**（走变体）。当前版本 **2.6.0**（31 条 cap，四层落地；一条命令安装；判别器误杀率 0%）。
+补丁主锚验证于 **Hermes 0.21.3**，**0.21.0 全量兼容**（走变体）。当前版本 **2.7.0**（31 条 cap，四层落地；一条命令安装；判别器误杀率 0%）。
 
 ---
 
@@ -532,6 +532,15 @@ node bin/purge.js stats           # 轮次 / 拒答收敛 / 重采样均值 / ca
 
 # 宿主解耦后：同一套命令，换 adapter 就能跑另一个宿主
 node bin/purge.js status --adapter=dsh --target=/path/to/dsh-home
+```
+
+**在 Hermes 里直接看**（无损扩展，走官方插件系统）：
+
+```bash
+purge plugin install      # 写 ~/.hermes/plugins/hermes_purge/，重启 Hermes 生效
+# 会话里：/purge [status|report|doctor|stats]
+# agent 也能自己回答「补丁开着吗」（purge_status 工具）
+purge plugin uninstall    # 删目录即还原，宿主一行未改
 ```
 
 **怎么「一眼看到开没开」**：`purge report` 出一张离线 HTML（结论 + 生效比例 + 每条能力走哪层 +

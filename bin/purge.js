@@ -58,6 +58,7 @@ function usageText() {
     '  purge revert [--force]       按 manifest 逐字节还原',
     '  purge doctor                 体检：哈希漂移 / 临时文件 / shim',
     '  purge report [--open] [--out=F]  生成单文件 HTML 状态报告（离线可开，能发给别人）',
+    '  purge plugin [install|uninstall|status]  装一个 Hermes 插件：/purge 命令 + purge_status 工具',
     '  purge stats [--json] [--since=ISO]  观测：轮次、拒答收敛、cap 命中、成本',
     '',
     '  --target=DIR   指定宿主目录（默认自动探测，或 HERMES_HOME / DSH_HOME）',
@@ -364,6 +365,64 @@ function cmdRevert() {
   metrics.record(TARGET, { event: 'revert', restored: r.restored.length });
 }
 
+/* ───────────── Hermes 插件（无损扩展）───────────── */
+
+function pluginDir() {
+  // 插件装在「配置根」下：~/.hermes/plugins/hermes_purge（或 $HERMES_HOME/plugins/…）
+  const env = process.env.HERMES_HOME;
+  const cfgRoot = (env && fs.existsSync(path.join(env, 'config.yaml')))
+    ? path.resolve(env)
+    : path.resolve(TARGET, '..');
+  return path.join(cfgRoot, 'plugins', 'hermes_purge');
+}
+
+function cmdPlugin() {
+  const sub = args._[1] || 'status';
+  const dest = pluginDir();
+  const src = path.join(__dirname, '..', 'lib', 'v2', 'plugin');
+
+  if (sub === 'install') {
+    if (!fs.existsSync(path.join(src, 'plugin.yaml'))) {
+      console.error('找不到插件模板：' + src);
+      process.exitCode = 1;
+      return;
+    }
+    fs.mkdirSync(dest, { recursive: true });
+    for (const f of ['plugin.yaml', '__init__.py']) {
+      fs.copyFileSync(path.join(src, f), path.join(dest, f));
+    }
+    fs.writeFileSync(path.join(dest, 'path.json'), JSON.stringify({
+      cli: path.join(__dirname, 'purge.js'),
+      node: platform.which('node') || process.execPath,
+      installedAt: new Date().toISOString(),
+    }, null, 2), 'utf8');
+    console.log('插件已安装 → ' + dest);
+    console.log('  /purge [status|report|doctor|stats]   会话内看状态');
+    console.log('  purge_status                          工具（agent 自己回答开没开）');
+    console.log('\n重启 Hermes 后生效（插件在启动时加载）。卸载：purge plugin uninstall');
+    return;
+  }
+
+  if (sub === 'uninstall') {
+    if (!fs.existsSync(dest)) { console.log('没装过（' + dest + ' 不存在）'); return; }
+    fs.rmSync(dest, { recursive: true, force: true });
+    console.log('插件已删除：' + dest + '（重启 Hermes 生效）');
+    return;
+  }
+
+  // status
+  const has = fs.existsSync(path.join(dest, 'plugin.yaml'));
+  console.log('插件目录  ' + dest);
+  console.log('状态      ' + (has ? '已安装（重启 Hermes 后生效/生效中）' : '未安装 —— purge plugin install'));
+  if (has) {
+    try {
+      const pj = JSON.parse(fs.readFileSync(path.join(dest, 'path.json'), 'utf8'));
+      const ok = pj.cli && fs.existsSync(pj.cli);
+      console.log('CLI 指向  ' + (pj.cli || '(缺)') + (ok ? '  ✔' : '  ✖ 文件不存在'));
+    } catch (e) { console.log('path.json  读取失败：' + e.message); }
+  }
+}
+
 function cmdReport() {
   const report = require('../lib/v2/report');
   const rows = collectRows();
@@ -642,6 +701,7 @@ switch (cmd) {
   case 'revert': cmdRevert(); break;
   case 'doctor': cmdDoctor(); break;
   case 'report': cmdReport(); break;
+  case 'plugin': cmdPlugin(); break;
   case 'stats': cmdStats(); break;
   case 'setup': cmdSetup(); break;
   case 'uninstall': cmdUninstall(); break;
