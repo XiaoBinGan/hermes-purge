@@ -1,5 +1,23 @@
 # Changelog
 
+## 3.0.2 —— 手表是 codicon，不是 svg
+
+用户贴了真实节点，问题清楚了：图标有两种形式 ——
+
+```html
+<i aria-hidden="true" class="codicon codicon-watch size-4 shrink-0 …"></i>   ← 手表（字体图标）
+<svg class="chevron">…</svg>                                                  ← 尾部小箭头
+```
+
+3.0.1 只清了 `svg`，`codicon` 那类 `<i>` 留了下来。
+
+修法：图标选择器改成 `svg, .codicon, i[class*="codicon"]`，一并清空；
+同时把从「定时任务」继承来的 `data-tour="sidebar-nav-cron"` / `data-state` /
+`data-hermes-context-menu-trigger` 去掉（否则入口还挂着 cron 的标识）。
+
+`test/desktop-dom.js` 的夹具按真实结构重写（codicon 图标 + svg 箭头 + 带 data-tour 的 span），
+断言注入后不残留 `watch / codicon / chevron`，也不残留 `sidebar-nav-cron`。
+
 ## 3.0.1 —— 去掉残留的「手表」图标
 
 现象：侧边栏入口上 Dart 图标之外还带着一个手表（定时任务的图标）。

@@ -20,7 +20,7 @@ const html = `<!doctype html><html><body>
       <li><button class="h-7 w-full" aria-label="新建"><svg></svg><span>新建会话</span></button></li>
       <li><button class="h-7 w-full" aria-label="技能"><svg></svg><span>技能</span></button></li>
       <li><button class="h-7 w-full" aria-label="产物"><svg></svg><span>产物</span></button></li>
-      <li><button class="h-7 w-full" aria-label="定时任务"><svg class="watch"></svg><span>定时任务</span><svg class="chevron"></svg></button></li>
+      <li><button class="h-7 w-full" aria-label="定时任务" data-tour="sidebar-nav-cron" data-state="closed"><i aria-hidden="true" class="codicon codicon-watch size-4 shrink-0"></i><span data-tour="sidebar-nav-cron">定时任务</span><svg class="chevron"></svg></button></li>
     </ul>
   </div></aside></body></html>`;
 
@@ -46,7 +46,8 @@ setTimeout(() => {
   // 克隆来的行有两个 svg（手表 + 小箭头），必须全清掉只留飞镖
   const svgs = btn.querySelectorAll('svg');
   if (svgs.length !== 1) fail('图标数量 ' + svgs.length + '（应只剩 1 个飞镖，不能残留手表/箭头）');
-  if (/watch|chevron/.test(btn.innerHTML)) fail('残留了克隆来的图标 class：' + btn.innerHTML.slice(0, 160));
+  if (/watch|chevron|codicon/.test(btn.innerHTML)) fail('残留了克隆来的图标 class：' + btn.innerHTML.slice(0, 200));
+  if (/sidebar-nav-cron/.test(btn.outerHTML)) fail('还带着 cron 的 data-tour 标记');
   if (btn) {
     btn.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
     const mask = window.document.getElementById('purge-mask');
