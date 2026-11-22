@@ -1,5 +1,30 @@
 # Changelog
 
+## 3.0.0 —— 面板能点了：飞镖图标 + 启用/停用/体检/刷新
+
+反馈：图标用飞镖；点开之后没有可操作的按钮（要有「启动/停止」这类）。
+
+### 图标
+
+侧边栏入口换成**飞镖**（镖身 + 镖尖 + 尾翼，纯 SVG，跟随主题色）。
+
+### 按钮（这是本版的实质）
+
+面板跑在 Electron 渲染进程里（沙箱、没有 node），自己不能执行 `purge apply`。
+新增 `purge serve`：只监听 `127.0.0.1:9123` 的本地控制服务，面板带 token 调它，
+服务端 fork 我们自己的 CLI 去做 —— 行为与命令行完全一致，不另写一套逻辑。
+
+- 按钮：**启用**（apply）/ **停用**（revert）/ **体检**（verify L2）/ **刷新**（重新生成报告并替换 iframe）
+- 执行结果直接显示在面板里（成功绿、失败红），完成后自动刷新报告
+- token 存 `<宿主机>/.hermes-purge/v2/control.json`（0600），每次请求都要带 `x-purge-token`
+- 动作白名单：只允许 apply / revert / verify / report；别的 action 一律 400
+- 服务没起时按钮会明确提示「控制服务没响应：先启动 purge serve」，不会假装成功
+
+### 测试
+
+`test/control.js` 7 项：token 落盘与权限、无/错 token → 401、非白名单 → 400、
+动作真的跑 CLI 并回传输出、`/api/report` 返回 HTML（面板刷新用）。
+
 ## 2.9.1 —— 修 doctor 对配置文件的误报（宿主机重写 config.yaml 是常态）
 
 现象：面板/CLI 里 `✖ 文件哈希 被外部改过：../config.yaml`，但 `purge status` 仍是 31/31。

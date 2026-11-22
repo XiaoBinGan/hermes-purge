@@ -60,6 +60,7 @@ function usageText() {
     '  purge report [--open] [--out=F]  生成单文件 HTML 状态报告（离线可开，能发给别人）',
     '  purge plugin [install|uninstall|status]  装一个 Hermes 插件：/purge 命令 + purge_status 工具',
     '  purge desktop [install|sync|uninstall|status]  在桌面端侧边栏加一个「hermes-purge 状态」入口',
+    '  purge serve [--port=9123]    起本地控制服务，让面板上的「启用/停用/体检/刷新」按钮可用',
     '  purge stats [--json] [--since=ISO]  观测：轮次、拒答收敛、cap 命中、成本',
     '',
     '  --target=DIR   指定宿主目录（默认自动探测，或 HERMES_HOME / DSH_HOME）',
@@ -479,6 +480,27 @@ function cmdReport() {
 
 /* ───────────── 桌面端面板（DOM 注入，可还原）───────────── */
 
+/* ───────────── 本地控制服务（给桌面面板的按钮用）───────────── */
+
+function cmdServe() {
+  const control = require('../lib/v2/control');
+  const want = args.port && args.port !== true ? Number(args.port) : 9123;
+  const { server, token } = control.start({
+    target: TARGET,
+    cliPath: path.join(__dirname, 'purge.js'),
+    port: want,
+    onReady: (bound) => {
+      console.log('控制服务 → http://127.0.0.1:' + bound + '  （只监听本机，需 x-purge-token）');
+      console.log('token    → ' + control.stateFile(TARGET) + '  (' + token.slice(0, 8) + '…)');
+      console.log('面板按钮：启用 / 停用 / 体检 / 刷新 —— 现在可以点了');
+      console.log('停止服务：Ctrl+C');
+    },
+  });
+  const bye = () => { try { server.close(); } catch (e) { /* 忽略 */ } process.exit(0); };
+  process.on('SIGINT', bye);
+  process.on('SIGTERM', bye);
+}
+
 function cmdDesktop() {
   const desktop = require('../lib/v2/desktop');
   const sub = args._[1] || 'status';
@@ -493,12 +515,13 @@ function cmdDesktop() {
 
   if (sub === 'install' || sub === 'sync') {
     const { html, generatedAt } = buildReportHtml();
+    const ctl = require('../lib/v2/control').ensureState(TARGET, { port: args.port ? Number(args.port) : undefined });
     for (const d of dists) {
       if (sub === 'install') {
-        desktop.install(d, { report: html, version: pkgVersion(), generatedAt });
+        desktop.install(d, { report: html, version: pkgVersion(), generatedAt, controlPort: ctl.port, controlToken: ctl.token });
         console.log('已挂到桌面端 → ' + d);
       } else {
-        const r = desktop.sync(d, { report: html, version: pkgVersion(), generatedAt });
+        const r = desktop.sync(d, { report: html, version: pkgVersion(), generatedAt, controlPort: ctl.port, controlToken: ctl.token });
         console.log((r.ok ? '已刷新快照 → ' : '未安装，先 install → ') + d);
       }
     }
@@ -777,6 +800,7 @@ switch (cmd) {
   case 'report': cmdReport(); break;
   case 'plugin': cmdPlugin(); break;
   case 'desktop': cmdDesktop(); break;
+  case 'serve': cmdServe(); break;
   case 'stats': cmdStats(); break;
   case 'setup': cmdSetup(); break;
   case 'uninstall': cmdUninstall(); break;
