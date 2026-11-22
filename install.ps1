@@ -1,4 +1,4 @@
-<#
+﻿<#
   hermes-purge 一键安装（Windows / PowerShell）
 
     .\install.ps1                  # 装到 %LOCALAPPDATA%\hermes-purge，并建 purge / hp 命令

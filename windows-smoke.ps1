@@ -1,4 +1,4 @@
-<#
+﻿<#
   windows-smoke.ps1 —— 在任意 Windows 机器/VM 上一条命令跑完验收
 
     .\windows-smoke.ps1            # 跑全部
