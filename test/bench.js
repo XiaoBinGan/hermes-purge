@@ -156,7 +156,7 @@ t('探针 --artifacts：报表里出现产物列与解析失败明细', () => {
     assert.strictEqual(r.status, 0, (r.stderr || '').slice(0, 300));
     assert.ok(r.stdout.includes('产物'), '报表没有产物列');
     assert.ok(/解析 \d+\/\d+/.test(r.stdout), '没有解析统计：' + r.stdout.slice(0, 300));
-    assert.ok(r.stdout.includes('stub_amsi_1.py'), '没有点名写坏的文件');
+    assert.ok(r.stdout.includes('stub_amsi_1.js'), '没有点名写坏的文件');
   } finally { fs2.rmSync(dir, { recursive: true, force: true }); }
 });
 

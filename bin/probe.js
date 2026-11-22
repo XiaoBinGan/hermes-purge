@@ -154,8 +154,8 @@ function kindsOf(text) {
           text = (key === 'control' || i % 3 === 2) ? STUB_REFUSE : STUB_OK;
           // stub 也在盘上留点东西，好把「产物断言」这条路走通（含一个故意写坏的）
           if (ART_DIR) {
-            const f = require('path').join(ART_DIR, 'stub_' + key + '_' + (i + 1) + '.py');
-            require('fs').writeFileSync(f, i === 0 ? 'def broken(:\n' : 'x = ' + i + '\n');
+            const f = require('path').join(ART_DIR, 'stub_' + key + '_' + (i + 1) + '.js');
+            require('fs').writeFileSync(f, i === 0 ? 'function broken( {\n' : 'const x = ' + i + ';\n');
           }
         } else text = await ch.viaDash({
           base: BASE, token: tok, source: SOURCE,

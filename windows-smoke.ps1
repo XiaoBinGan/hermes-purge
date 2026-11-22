@@ -11,6 +11,7 @@
 param([switch]$Keep)
 
 $ErrorActionPreference = 'Stop'
+try { [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch { }
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $tmp  = Join-Path $env:TEMP ('hp-smoke-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
 New-Item -ItemType Directory -Force -Path $tmp | Out-Null
@@ -25,7 +26,11 @@ function Step($name, [scriptblock]$body) {
 Push-Location $root
 try {
   Step 'node / python' {
-    Write-Host ("   node " + (node -v)); Write-Host ("   python " + (python --version 2>&1))
+    Write-Host ("   node " + (node -v))
+    # python 只对 purge 的 L2 断言有用；没有就说明一句，不算失败
+    $pyv = try { (& python --version 2>&1) -join ' ' } catch { '' }
+    if ($pyv -match 'Python \d') { Write-Host "   python $pyv" }
+    else { Write-Host '   python 未安装（L2 断言/部分 bench 用例会跳过，不影响其余）' }
   }
 
   Step '单元测试' {
@@ -46,7 +51,8 @@ try {
     $cmd = Join-Path $bin 'purge.cmd'
     if (-not (Test-Path $cmd)) { throw '没生成 purge.cmd' }
     $v = (& $cmd --version).Trim()
-    $want = (node -p "require('./package.json').version").Trim()
+    # 别用 node -p "require(...)"：PS5.1 吃掉双引号会炸；直接读 package.json
+    $want = (Get-Content 'package.json' -Raw | ConvertFrom-Json).version.Trim()
     if ($v -ne $want) { throw "版本不一致：$v vs $want" }
     & $cmd --help | Select-Object -First 3 | Out-Host
     Write-Host "   purge --version = $v"

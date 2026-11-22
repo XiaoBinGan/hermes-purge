@@ -17,6 +17,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+try { [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch { }
 
 function Say($m)  { Write-Host $m }
 function Warn($m) { Write-Host $m -ForegroundColor Yellow }
@@ -34,7 +35,9 @@ if ($Uninstall) {
 
 $node = Get-Command node -ErrorAction SilentlyContinue
 if (-not $node) { Die ' 找不到 node。先装 Node.js ≥18：https://nodejs.org/' }
-$major = [int]((& node -p 'process.versions.node.split(".")[0]').Trim())
+# 注意：PowerShell 5.1 会把传给原生程序的参数里的双引号吃掉，所以别用 node -p "..." 带引号的表达式
+$nv = (& node -v).Trim()
+$major = [int]($nv.TrimStart('v').Split('.')[0])
 if ($major -lt 18) { Die "Node 版本太低（$(& node -v)）。需要 ≥18。" }
 
 $Src = $PSScriptRoot
