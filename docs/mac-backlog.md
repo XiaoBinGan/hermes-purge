@@ -6,7 +6,8 @@
 
 - [x] **配置层写入幂等审计**（3.1.7）：`yamlMaxTokens` 在根上无 `model:` 段时直接 no-op
       → C15 永远 pending；追加路径的 approvals 风格不统一 → 一并修掉，测试 +2
-- [ ] **`.env` 幂等 + 去重**：`appendEnv` 现在的行为在重复 apply 下是否稳定
+- [x] **`.env` 幂等 + 去重**（第 2 轮）：`appendEnv` 只看键不看值（`HERMES_APPROVAL_MODE=prompt`
+      也算已生效）、`.env` 不存在时整条 cap 不可用 → 改成值感知 + 就地改写 + 缺文件自动创建
 - [ ] **`purge serve` launchd 守护**：macOS 开机自启，面板按钮不依赖手动起服务
 - [ ] **面板自动刷新**：宿主状态变化后（apply/revert）自动重建快照，不用手动 `desktop sync`
 - [ ] **`purge parity` 增加按层汇总**：不只逐条，给出「哪些层一致 / 哪层缺」
