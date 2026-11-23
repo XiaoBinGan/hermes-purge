@@ -65,6 +65,20 @@ module.exports = { label, map: {
 要求：`find` 带真实缩进（文本层在 LF 视图匹配、写回恢复原 EOL），`to` 缩进一致且保留
 `[hermes-purge]` 标记；不确定先 `purge apply --dry`。
 
+## 护栏自检
+
+```bash
+scripts/lane-guard.sh              # 默认查 lane/mac
+scripts/lane-guard.sh --lane=lane/win
+```
+
+检查四件事，任何红项非 0 退出：
+
+1. 本泳道有没有改过**对方**的锚点文件（`lane/mac` 不许碰 `lib/anchors/hermes-win.js`，反之亦然）
+2. `main` 的分支保护是否还在（必须走 PR、管理员同样受限）
+3. 本地 `main` 与 `origin/main` 是否一致（防止有人本地直推）
+4. `lane/*` 合进 `main` 会不会冲突（`git merge-tree` 干跑，不落地）
+
 ## 同步方式
 
 ```bash
