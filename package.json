@@ -1,7 +1,7 @@
 {
   "name": "hermes-purge",
-  "version": "1.1.1",
-  "description": "Hermes Agent 三层清洗：提示词人格、config 审批策略、代码层审批门与黑名单。附破甲执行器与效力边界探针。",
+  "version": "3.1.1",
+  "description": "宿主无关的能力层（capability）引擎 —— adapter 注册表 + AST/shim/文本/配置 四层落地，内置 Hermes Agent 与 DeepSeek Harness 两个 adapter；事务回滚 + 三级验证 + 观测。跨 macOS / Windows。",
   "license": "MIT",
   "author": "XiaoBinGan",
   "repository": {
@@ -15,6 +15,10 @@
   "keywords": [
     "hermes",
     "hermes-agent",
+    "deepseek-harness",
+    "dsh",
+    "adapter",
+    "capability",
     "patch",
     "approval",
     "jailbreak",
@@ -22,26 +26,45 @@
   ],
   "bin": {
     "hermes-purge": "./bin/hermes-purge.js",
-    "hp": "./bin/hp.js"
+    "hp": "./bin/hp.js",
+    "purge": "./bin/purge.js"
   },
   "main": "./lib/core.js",
   "files": [
     "bin/",
     "lib/",
-    "test/",
+    "adapters/",
+    "test/dsh-fixture.js",
+    "test/dsh.js",
     "payload/SOUL.md",
     "payload/prefill_messages.json",
     "hp.cmd",
+    "purge.cmd",
     "README.md",
     "CHANGELOG.md",
-    "LICENSE"
+    "LICENSE",
+    "docs/",
+    "install.sh",
+    "install.ps1",
+    "bench/",
+    "windows-smoke.ps1"
   ],
   "scripts": {
     "status": "node bin/hermes-purge.js --status",
     "apply": "node bin/hermes-purge.js --apply",
     "verify": "node bin/hermes-purge.js --verify",
     "revert": "node bin/hermes-purge.js --revert",
-    "test": "node test/smoke.js"
+    "test": "node test/smoke.js && node test/v2.js && node test/dsh.js && node test/setup.js && node test/bench.js && node test/plugin.js && node test/control.js && node test/desktop.js && node test/desktop-dom.js",
+    "test:package": "node test/package.js",
+    "test:dsh": "node test/dsh.js",
+    "v2": "node bin/purge.js",
+    "v2:dsh": "node bin/purge.js status --adapter=dsh",
+    "test:setup": "node test/setup.js",
+    "test:bench": "node test/bench.js",
+    "judge": "node bench/judge-eval.js",
+    "test:plugin": "node test/plugin.js",
+    "test:desktop": "node test/desktop.js",
+    "test:control": "node test/control.js"
   },
   "engines": {
     "node": ">=18"

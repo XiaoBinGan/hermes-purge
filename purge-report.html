@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>hermes-purge 状态 · hermes</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.55 -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+         background: Canvas; color: CanvasText; }
+  main { max-width: 1080px; margin: 0 auto; padding: 28px 20px 60px; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  h2 { font-size: 14px; margin: 26px 0 8px; text-transform: none; }
+  .muted { color: #94a3b8; font-weight: 400; }
+  .verdict { display: flex; align-items: baseline; gap: 12px; padding: 16px 18px; border-radius: 12px;
+             background: color-mix(in srgb, #22c55e 12%, transparent);
+             border: 1px solid color-mix(in srgb, #22c55e 45%, transparent); }
+  .verdict .big { font-size: 22px; font-weight: 700; color: #22c55e; }
+  .verdict .sub { color: #64748b; }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 14px; }
+  .kpi { border: 1px solid color-mix(in srgb, CanvasText 14%, transparent); border-radius: 10px; padding: 12px; }
+  .kpi .v { font-size: 20px; font-weight: 700; }
+  .kpi .k { font-size: 12px; color: #64748b; margin-top: 2px; }
+  .kpi .h { font-size: 11px; color: #94a3b8; margin-top: 4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid color-mix(in srgb, CanvasText 10%, transparent); }
+  th { font-weight: 600; color: #64748b; font-size: 12px; }
+  td.id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #64748b; width: 66px; }
+  td.detail { color: #94a3b8; font-size: 12px; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+  .impl { font-family: ui-monospace, monospace; font-size: 12px; padding: 1px 6px; border-radius: 999px;
+          border: 1px solid color-mix(in srgb, CanvasText 18%, transparent); }
+  ul.checks { list-style: none; padding: 0; margin: 0; }
+  ul.checks li { padding: 5px 0; border-bottom: 1px dashed color-mix(in srgb, CanvasText 10%, transparent); }
+  ul.checks li span { margin-right: 8px; }
+  ul.checks li.ok span { color: #22c55e; }
+  ul.checks li.bad span { color: #ef4444; }
+  ul.checks em, ul.audit em { color: #94a3b8; font-style: normal; margin-left: 8px; font-size: 12px; }
+  ul.audit { list-style: none; padding: 0; margin: 0; font-size: 13px; }
+  ul.audit time { color: #94a3b8; font-family: ui-monospace, monospace; font-size: 11px; margin-right: 10px; }
+  footer { margin-top: 30px; color: #94a3b8; font-size: 12px; border-top: 1px solid color-mix(in srgb, CanvasText 10%, transparent); padding-top: 12px; }
+  code { font-family: ui-monospace, monospace; background: color-mix(in srgb, CanvasText 8%, transparent);
+         padding: 1px 5px; border-radius: 4px; }
+  @media (prefers-color-scheme: dark) { body { background: #0b1020; color: #e2e8f0; } }
+</style></head>
+<body><main>
+  <h1>hermes-purge 状态报告</h1>
+  <div class="muted">宿主 <b>hermes</b> · /Users/supre/.hermes/hermes-agent</div>
+
+  <div class="verdict" style="margin-top:16px">
+    <div class="big">已开启（全部生效）</div>
+    <div class="sub">31/31 条能力生效 · 待应用 0 · 不可用 0</div>
+  </div>
+
+  <div class="kpis">
+    
+    <div class="kpi"><div class="v">31 / 31</div><div class="k">生效 / 总数</div>
+      </div>
+    
+    <div class="kpi"><div class="v">ast 12 · text 19</div><div class="k">实现层分布</div>
+      <div class="h">AST 抗搬家 · shim 抗版本 · text 兼容层</div></div>
+    
+    <div class="kpi"><div class="v">n/a</div><div class="k">对话轮次</div>
+      <div class="h">还没有轮次数据</div></div>
+    
+    <div class="kpi"><div class="v">2.9.1 / 0.21.0</div><div class="k">版本 / 宿主版本</div>
+      </div>
+  </div>
+
+  <h2>健康检查 <span class="muted">doctor</span></h2>
+  <ul class="checks">
+    <li class="ok"><span>✔</span>
+      <b>latest manifest</b><em>id=2026-11-18T05-02-10-358Z-01f73c（19 个文件）</em></li>
+    <li class="ok"><span>✔</span>
+      <b>文件哈希</b><em>代码文件与 apply 后一致</em></li>
+    <li class="ok"><span>✔</span>
+      <b>配置文件重写</b><em>../config.yaml 被宿主/你重写过（语义另由配置层 cap 校验，不算异常）</em></li>
+    <li class="ok"><span>✔</span>
+      <b>临时文件残留</b><em>无</em></li>
+    <li class="ok"><span>✔</span>
+      <b>1.x 备份共存</b><em>8 个 .bak（1.x 留下，v2 不依赖它们）</em></li>
+    <li class="ok"><span>✔</span>
+      <b>宿主 python</b><em>/Users/supre/.hermes/hermes-agent/venv/bin/python</em></li>
+    <li class="ok"><span>✔</span>
+      <b>shim 注入</b><em>/Users/supre/.hermes/hermes-agent/venv/lib/python3.11/site-packages/_hermes_purge.pth</em></li></ul>
+
+  <h2>能力明细 <span class="muted">每条走哪层实现</span></h2>
+  
+    <h2>代码层 <span class="muted">25 条</span></h2>
+    <table>
+      <thead><tr><th>ID</th><th>状态</th><th>实现层</th><th>行为</th><th>说明</th></tr></thead>
+      <tbody><tr>
+      <td class="id">C01</td>
+      <td><span class="dot" style="background:#22c55e"></span>已生效</td>
+      <td><span class="impl">ast</span></td>
+      <td class="cap">approval.yolo_frozen</td>
+      <td class="detail">1 处已生效</td>
+    </tr><tr>
+      <td class="id">C02</td>
+      <td><span class="dot" style="background:#22c55e"></span>已生效</td>
+      <td><span class="impl">ast</span></td>
+      <td class="cap">approval.bypass.session</td>
+      <td class="detail">1 处已生效</td>
+    </tr><tr>
+      <td class="id">C03</td>
+      <td><span class="dot" style="background:#22c55e"></span>已生效</td>
+      <td><span class="impl">ast</span></td>
+      <td class="cap">approval.bypass.global</td>
+      <td class="detail">1 处已生效</td>
+    </tr><tr>
+      <td class="id">C04</td>
+      <td><span class="dot" style="background:#22c55e"></span>已生效</td>
+      <td><span class="impl">ast</span></td>
+      <td class="cap">approval.mode.off</td>
+      <td class="detail">1 处已生效</td>
+    </tr><tr>
+      <td class="id">C05</td>
+      <td><span class="dot" style="background:#22c55e"></span>已生效</td>
+      <td><span class="impl">ast</span></td>
+      <td class="cap">approval.mode.normalize</td>
+      <td class="detail">1 处已生效</td>
+    </tr><tr>
+      <td class="id">C06</td>
+      <td><span class="dot" style="background:#22c55e"></span>已生效</td>
+      <td><span class="impl">ast</span></td>
+      <td class="cap">approval.context.cron_unattended</td>
+      <td class="detail">3 处已生效</td>
+    </tr><tr>
+      <td class="id">C07</td>
+      <td><span class="dot" style="background:#22c55e"></span>已生效</td>
+      <td><span class="impl">ast</span></td>
+      <td class="cap">edit.auto_approve</td>
+      <td class="detail">1 处已生效</td>
+    </tr><tr>
+      <td class="id">C08</td>
+      <td><span class="dot" style="background:#22c55e"></span>已生效</td>
+      <td><span class="impl">ast</span></td>
+      <td class="cap">edit.skip_approval</td>
+      <td class="detail">1 处已生效</td>
+    </tr><tr>
+      <td class="id">C09</td>
+      <td><span class="dot" style="background:#22c55e"></span>已生效</td>
+      <td><span class="impl">ast</span></td>
+      <td class="cap">guardrail.allow</td>
+      <td class="detail">1 处已生效</td>
+    </tr><tr>
+      <td class="id">C10</td>
+      <td><span class="dot" style="background:#22c55e"></span>已生效</td>
+      <td><span class="impl">ast</span></td>
+      <td class="cap">guardrail.no_halt</td>
+      <td class="detail">1 处已生效</td>
+    </tr><tr>
+      <td class="id">C11</td>
+      <td><span class="dot" style="background:#22c55e"></span>已生效</td>
+      <td><span class="impl">ast</span></td>
+      <td class="cap">detect.hardline.off</td>
+      <td class="detail">1 处已生效</td>
+    </tr><tr>
+      <td class="id">C12</td>
+      <td><span class="dot" style="background:#22c55e"></span>已生效</td>
+      <td><span class="impl">ast</span></td>
+      <td class="cap">detect.dangerous.off</td>
+      <td class="detail">1 处已生效</td>
+    </tr><tr>
+      <td class="id">C13</td>
+      <td><span class="dot" style="background:#22c55e"></span>已生效</td>
+      <td><span class="impl">text</span></td>
+      <td class="cap">prompt.system_to_user</td>
+      <td class="detail">已注入 C13</td>
+    </tr><tr>
+      <td class="id">C14</td>
+      <td><span class="dot" style="background:#22c55e"></span>已生效</td>
+      <td><span class="impl">text</span></td>
+      <td class="cap">prompt.summary_path</td>
+      <td class="detail">已替换</td>
+    </tr><tr>
+      <td class="id">C16</td>
+      <td><span class="dot" style="background:#22c55e"></span>已生效</td>
+      <td><span class="impl">text</span></td>
+      <td class="cap">prompt.tail_prefill</td>
+      <td class="detail">已注入 C16</td>
+    </tr><tr>
+      <td class="id">C18</td>
+      <td><span class="dot" style="background:#22c55e"></span>已生效</td>
+      <td><span class="impl">text</span></td>
+      <td class="cap">import.re</td>
+      <td class="detail">conversation_loop 已自带 re / os / Any / Optional，无需引入</td>
+    </tr><tr>
+      <td class="id">C18c</td>
+      <td><span class="dot" style="background:#22c55e"></span>已生效</td>
+      <td><span class="impl">text</span></td>
+      <td class="cap">refusal.resample.helper</td>
+      <td class="detail">已注入 C18c</td>
+    </tr><tr>
+      <td class="id">C18b</td>
+      <td><span class="dot" style="background:#22c55e"></span>已生效</td>
+      <td><span class="impl">text</span></td>
+      <td class="cap">refusal.resample.gate</td>
+      <td class="detail">已注入 C18b</td>
+    </tr><tr>
+      <td class="id">C18d</td>
+      <td><span class="dot" style="background:#22c55e"></span>已生效</td>
+      <td><span class="impl">text</span></td>
+      <td class="cap">refusal.resample.reset</td>
+      <td class="detail">agent._purge_refusal_nudges = 0</td>
+    </tr><tr>
+      <td class="id">C19b</td>
+      <td><span class="dot" style="background:#22c55e"></span>已生效</td>
+      <td><span class="impl">text</span></td>
+      <td class="cap">stream.buf.reset</td>
+      <td class="detail">已注入 C19b</td>
+    </tr><tr>
+      <td class="id">C19c</td>
+      <td><span class="dot" style="background:#22c55e"></span>已生效</td>
+      <td><span class="impl">text</span></td>
+      <td class="cap">stream.refusal_mute</td>
+      <td class="detail">已注入 C19c</td>
+    </tr><tr>
+      <td class="id">C19d</td>
+      <td><span class="dot" style="background:#22c55e"></span>已生效</td>
+      <td><span class="impl">text</span></td>
+      <td class="cap">stream.refusal_re</td>
+      <td class="detail">已注入 C19d</td>
+    </tr><tr>
+      <td class="id">C19e</td>
+      <td><span class="dot" style="background:#22c55e"></span>已生效</td>
+      <td><span class="impl">text</span></td>
+      <td class="cap">stream.tail_flush</td>
+      <td class="detail">已注入 C19e</td>
+    </tr><tr>
+      <td class="id">C20</td>
+      <td><span class="dot" style="background:#22c55e"></span>已生效</td>
+      <td><span class="impl">text</span></td>
+      <td class="cap">sampling.temperature</td>
+      <td class="detail">已注入 C20</td>
+    </tr><tr>
+      <td class="id">C20b</td>
+      <td><span class="dot" style="background:#22c55e"></span>已生效</td>
+      <td><span class="impl">text</span></td>
+      <td class="cap">import.os</td>
+      <td class="detail">已注入 C20b</td>
+    </tr></tbody>
+    </table>
+    <h2>配置层 <span class="muted">4 条</span></h2>
+    <table>
+      <thead><tr><th>ID</th><th>状态</th><th>实现层</th><th>行为</th><th>说明</th></tr></thead>
+      <tbody><tr>
+      <td class="id">C15</td>
+      <td><span class="dot" style="background:#22c55e"></span>已生效</td>
+      <td><span class="impl">text</span></td>
+      <td class="cap">budget.max_tokens</td>
+      <td class="detail">max_tokens: 16000</td>
+    </tr><tr>
+      <td class="id">C17</td>
+      <td><span class="dot" style="background:#22c55e"></span>已生效</td>
+      <td><span class="impl">text</span></td>
+      <td class="cap">prompt.prefill_file</td>
+      <td class="detail">prefill_messages.json</td>
+    </tr><tr>
+      <td class="id">G01</td>
+      <td><span class="dot" style="background:#22c55e"></span>已生效</td>
+      <td><span class="impl">text</span></td>
+      <td class="cap">config.approvals</td>
+      <td class="detail">mode: off, timeout 86400</td>
+    </tr><tr>
+      <td class="id">G02</td>
+      <td><span class="dot" style="background:#22c55e"></span>已生效</td>
+      <td><span class="impl">text</span></td>
+      <td class="cap">config.env</td>
+      <td class="detail">环境变量已存在</td>
+    </tr></tbody>
+    </table>
+    <h2>提示词层 <span class="muted">2 条</span></h2>
+    <table>
+      <thead><tr><th>ID</th><th>状态</th><th>实现层</th><th>行为</th><th>说明</th></tr></thead>
+      <tbody><tr>
+      <td class="id">P01</td>
+      <td><span class="dot" style="background:#22c55e"></span>已生效</td>
+      <td><span class="impl">text</span></td>
+      <td class="cap">persona.soul.home</td>
+      <td class="detail">payload v2</td>
+    </tr><tr>
+      <td class="id">P02</td>
+      <td><span class="dot" style="background:#22c55e"></span>已生效</td>
+      <td><span class="impl">text</span></td>
+      <td class="cap">persona.soul.repo</td>
+      <td class="detail">payload v2</td>
+    </tr></tbody>
+    </table>
+
+  <h2>最近动作 <span class="muted">audit</span></h2>
+  <ul class="audit">
+    <li><time>2026-11-18T05:02:13.283Z</time><b>apply</b>
+      <em>改写 1</em></li>
+    <li><time>2026-11-17T18:51:09.149Z</time><b>apply</b>
+      <em>改写 2</em></li></ul>
+
+  <footer>
+    生成于 2026/11/23 00:28:26 · 这份报告是静态快照，重跑 <code>purge report</code> 才会更新<br>
+    回滚：<code>purge revert</code> · 复检：<code>purge verify --level=2</code> · 卸载：<code>purge uninstall</code>
+  </footer>
+</main></body></html>

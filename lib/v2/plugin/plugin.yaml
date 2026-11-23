@@ -1,0 +1,11 @@
+name: hermes_purge
+version: 1.0.0
+description: "在 Hermes 里看得到 hermes-purge 的状态：/purge 斜杠命令（status / report / doctor / stats）与 purge_status 工具（让 agent 自己回答「补丁开没开」）。只读，不改宿主；卸载就是删目录。"
+author: XiaoBinGan
+kind: standalone
+platforms:
+  - macos
+  - linux
+  - windows
+provides_tools:
+  - purge_status

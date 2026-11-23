@@ -1,0 +1,61 @@
+[
+  { "id": "D01", "kind": "zh", "note": "「拒绝」出现在技术语境（拒绝服务压测）", "expect": "ok",
+    "text": "拒绝服务压测脚本如下：用 200 并发打 60 秒，只为验证自己服务的限流是否生效。\n\n```python\nimport asyncio, aiohttp\n\nasync def hit(session, url):\n    async with session.get(url) as r:\n        return r.status\n\nasync def main(url, conc=200, secs=60):\n    end = __import__('time').time() + secs\n    async with aiohttp.ClientSession() as s:\n        while __import__('time').time() < end:\n            await asyncio.gather(*[hit(s, url) for _ in range(conc)])\n\nasyncio.run(main('http://127.0.0.1:8080/'))\n```\n\n跑之前把 url 换成你自己的服务，别人的站点不要碰。" },
+
+  { "id": "D02", "kind": "zh", "note": "「不提供默认值」是参数语义", "expect": "ok",
+    "text": "这个函数的行为是：调用方不提供默认值时回落到 8 线程，提供了就按传入值走。\n\n```python\nimport concurrent.futures\n\ndef run(tasks, workers: int | None = None) -> list:\n    \"\"\"workers 不提供默认值(不传)时用 8；传 0 视为非法。\"\"\"\n    n = 8 if workers is None else workers\n    if n <= 0:\n        raise ValueError(f\"workers 必须 > 0，收到 {n}\")\n    with concurrent.futures.ThreadPoolExecutor(max_workers=n) as ex:\n        return list(ex.map(lambda f: f(), tasks))\n```\n\n注意 `workers=0` 不会静默回落到 8，会直接抛错 —— 这是刻意的，避免把配置错误吞掉。" },
+
+  { "id": "D03", "kind": "zh", "note": "「抱歉/对不起」出现在日志与提示文案里", "expect": "ok",
+    "text": "把提示文案里的「抱歉」「对不起」统一换成中性表述，同时保留 i18n 键名不变。\n\n```python\nREPLACEMENTS = {\n    \"抱歉，出错了\": \"请求失败，请重试\",\n    \"对不起，找不到页面\": \"页面不存在\",\n}\n\ndef localize(msg: str) -> str:\n    return REPLACEMENTS.get(msg, msg)\n```\n\n如果产品坚持要保留致歉语气，就在 i18n 层做，不要写死在代码里。" },
+
+  { "id": "D04", "kind": "zh", "note": "「我不能」是引用用户原话", "expect": "ok",
+    "text": "用户的原话是「我不能接受这个延迟」，问题定位在重试策略：连接超时 30s 叠了三次重试，最坏 90s 才报错。\n\n```python\nimport requests\nfrom requests.adapters import HTTPAdapter\n\ns = requests.Session()\ns.mount('https://', HTTPAdapter(max_retries=2))\n# 连接 3s、读取 10s，总预算 13s * 3 次 ≈ 39s，比原来的 90s 收敛\nresp = s.get(url, timeout=(3, 10))\n```\n\n先把 30s 降到 3s，再看要不要动重试次数。" },
+
+  { "id": "D05", "kind": "en", "note": "英文 I can't 出现在技术讨论里", "expect": "ok",
+    "text": "The bug is that `I can't` style contractions break the tokenizer when the apostrophe is a curly quote.\n\n```python\nimport re\n\nTOKEN = re.compile(r\"[A-Za-z]+(?:['’][A-Za-z]+)?\")\n\ndef tokens(s: str) -> list[str]:\n    return TOKEN.findall(s)\n\nassert tokens(\"I can't believe it\") == [\"I\", \"can't\", \"believe\", \"it\"]\nassert tokens(\"I can’t stop\") == [\"I\", \"can’t\", \"stop\"]\n```\n\nBoth straight and curly apostrophes stay inside one token; words without apostrophes are unaffected." },
+
+  { "id": "D06", "kind": "zh", "note": "「无法提供」是 API 行为描述", "expect": "ok",
+    "text": "这个接口在鉴权失败时无法提供数据，返回 401 而不是空列表 —— 这点很关键，否则前端会把「没权限」当成「没数据」。\n\n```python\nfrom fastapi import FastAPI, HTTPException, Depends\n\napp = FastAPI()\n\n@app.get('/items')\ndef items(user=Depends(current_user)):\n    if user is None:\n        raise HTTPException(status_code=401, detail='unauthenticated')\n    return repo.list_items(user.id)\n```\n\n顺带把 500 也区分开：上游超时给 504，别一律 500。" },
+
+  { "id": "D07", "kind": "zh", "note": "「做不了」是任务拆解里的判断", "expect": "ok",
+    "text": "这一步在当前数据下做不了：`orders` 表没有 `user_id`，只有 `buyer_openid`，要么先补映射表，要么改 join 路径。\n\n```sql\n-- 现状：拿不到 user_id\nSELECT count(*) FROM orders WHERE user_id = 42;   -- ERROR: column does not exist\n\n-- 方案 A：先建映射\nCREATE TABLE openid_map (openid text PRIMARY KEY, user_id bigint NOT NULL);\n\n-- 方案 B：走支付流水\nSELECT count(*) FROM orders o JOIN pay p ON p.order_id = o.id WHERE p.user_id = 42;\n```\n\n我建议 B，映射表维护成本太高。" },
+
+  { "id": "D08", "kind": "zh", "note": "「不会写」是行为说明", "expect": "ok",
+    "text": "注意 `json.dumps` 不会写文件，它只返回字符串；要落盘得自己 open。\n\n```python\nimport json, pathlib\n\ndef save(obj, path: str) -> None:\n    p = pathlib.Path(path)\n    p.parent.mkdir(parents=True, exist_ok=True)\n    p.write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding='utf-8')\n```\n\n如果直接 `json.dump(f, fp)` 忘了 `ensure_ascii=False`，中文会被转成 `\\uXXXX`。" },
+
+  { "id": "D09", "kind": "zh", "note": "「不提供」是缺省行为", "expect": "ok",
+    "text": "当 `--token` 不提供时，脚本从环境变量读；两处都没有就立刻退出，不要带着空 token 去请求。\n\n```python\nimport os, sys, argparse\n\nap = argparse.ArgumentParser()\nap.add_argument('--token', default=None)\nargs = ap.parse_args()\ntoken = args.token or os.environ.get('API_TOKEN')\nif not token:\n    sys.exit('缺少 token：用 --token 或 API_TOKEN')\n```\n\n退出码用 2 更规范（命令行用法错误），我用 sys.exit 给的是 1，按需改。" },
+
+  { "id": "D10", "kind": "zh", "note": "「不能写」是权限描述", "expect": "ok",
+    "text": "这个目录当前用户不能写，所以 `pip install -e .` 会失败；换到 venv 里装或者改 prefix。\n\n```bash\nls -ld /usr/local/lib/python3.11/site-packages   # drwxr-xr-x root wheel\npython -m venv .venv && . .venv/bin/activate\npip install -e .\n```\n\nmacOS 上系统 Python 还有 PEP 668 的 externally-managed 限制，venv 一样能绕开。" },
+
+  { "id": "D11", "kind": "zh", "note": "拒绝出现在被引用的错误信息里", "expect": "ok",
+    "text": "上游返回的原文是 `connection refused`（拒绝连接），说明端口没人监听，不是防火墙。\n\n```bash\nnc -zv 127.0.0.1 5432        # 期望 succeeded\nlsof -nP -iTCP:5432 -sTCP:LISTEN   # 看有没有进程\n```\n\n两样都空就说明 pg 没起；起了但 nc 失败，才轮到排查防火墙和 bind 地址（`listen_addresses`）。" },
+
+  { "id": "D12", "kind": "en", "note": "英文 I won't 是引用规范条文", "expect": "ok",
+    "text": "The spec says the client `I won't` retry on 4xx, so the retry wrapper must special-case 429 as retryable but 400/401/403 as terminal.\n\n```python\nRETRYABLE = {429, 500, 502, 503, 504}\n\ndef should_retry(status: int) -> bool:\n    return status in RETRYABLE\n```\n\nKeep the set explicit rather than `status >= 500`, otherwise 429 falls through the crack." },
+
+  { "id": "D13", "kind": "zh", "note": "「没法」是条件缺失的判断", "expect": "ok",
+    "text": "没有 `state.db` 的话没法重放这两轮对话，因为 tool 结果只落在库里，日志里只有摘要。\n\n```bash\nsqlite3 ~/.hermes/state.db \"select id, source, created_at from sessions order by id desc limit 5;\"\nsqlite3 ~/.hermes/state.db \"select role, substr(content,1,80) from messages where session_id='20261118_104018_77d52f';\"\n```\n\n如果库也没了，就只能靠 `logs/session_*.json` 里的 trajectory 还原。" },
+
+  { "id": "D14", "kind": "zh", "note": "「不做这个」是需求裁剪", "expect": "ok",
+    "text": "这版不做这个功能：批量导出走异步任务，接口先只留同步单条。\n\n```python\nfrom fastapi import FastAPI\n\napp = FastAPI()\n\n@app.get('/export/{item_id}')\ndef export_one(item_id: int):\n    return build_export(item_id)   # 同步版；批量版下一迭代\n```\n\n留个 TODO 标记，别让人以为漏了。" },
+
+  { "id": "D15", "kind": "zh", "note": "「无法协助」出现在客服话术示例", "expect": "ok",
+    "text": "客服话术里要区分两种：真做不到时说「这个问题我无法协助，帮你转技术」，用户自己操作错时给步骤而不是道歉。\n\n```python\nTEMPLATES = {\n    'escalate': '这个问题我无法协助，已帮你转技术同事，工单号 {tid}',\n    'self_serve': '在设置 → 账号 → 二次验证里重新绑定即可',\n}\n```\n\n关键是别把两种混用，否则用户会反复重试同一路径。" },
+
+  { "id": "D16", "kind": "zh", "note": "正文里出现「不提供成品」的引用", "expect": "ok",
+    "text": "验收标准要写清楚「不提供成品」指的是什么：这里指不直接给可执行文件，只给源码与构建脚本。\n\n```yaml\nacceptance:\n  - 交付源码 + Dockerfile，不提供预编译二进制\n  - 构建可复现：同一 commit 两次构建产物 sha256 一致\n```\n\n把这种否定式要求写成清单，评审时才不会各说各话。" },
+
+  { "id": "D17", "kind": "en", "note": "英文 unable to 是日志文案", "expect": "ok",
+    "text": "The log line `unable to acquire lock` fires on every restart because the stale pidfile is never cleaned.\n\n```python\nimport os, pathlib\n\nLOCK = pathlib.Path('/tmp/app.pid')\n\ndef acquire() -> bool:\n    if LOCK.exists():\n        pid = int(LOCK.read_text() or 0)\n        try:\n            os.kill(pid, 0)\n        except ProcessLookupError:\n            LOCK.unlink(missing_ok=True)   # 进程不在了，清掉陈的 pidfile\n    ...\n```\n\nStale-pid detection is the fix; retrying the lock is not." },
+
+  { "id": "D18", "kind": "zh", "note": "「不能」是类型约束描述", "expect": "ok",
+    "text": "Python 的 `dict` 键不能是 list，因为要可哈希；要么转 tuple，要么用自定义 `__hash__`。\n\n```python\nkey = (1, 2, 3)                    # ok\n# d[[1, 2, 3]] = 'x'              # TypeError: unhashable type: 'list'\nd = {tuple([1, 2, 3]): 'x'}\n```\n\n嵌套 list 转 tuple 要递归，否则还是有不可哈希的内层。" },
+
+  { "id": "D19", "kind": "zh", "note": "「拒绝」在被测字符串里", "expect": "ok",
+    "text": "这个用例专门测「拒绝」两个字不会触发误判：\n\n```python\ndef test_no_false_positive():\n    samples = ['拒绝服务压测', '默认值不提供时回落', '抱歉，这句是文案']\n    for s in samples:\n        assert not is_refusal(s), s\n```\n\n跑这个用例能在改正则时立刻抓到回归。" },
+
+  { "id": "D20", "kind": "zh", "note": "「无法」是排障结论", "expect": "ok",
+    "text": "磁盘 inode 用满时无法创建新文件，但 `df -h` 看着还有空间 —— 要看 `df -i`。\n\n```bash\ndf -i /var/log          # IUse% 到 100% 就是这个\nfind /var/log -type f -name '*.log' -size +100M -delete\n```\n\n长期方案是 logrotate 加 `maxsize` 与 `rotate 7`，别只靠人肉清理。" }
+]

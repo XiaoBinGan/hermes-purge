@@ -6,7 +6,11 @@
 import os
 import sys
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "hermes", "hermes-agent"))
+# 宿主目录：优先环境变量，其次 HERMES_HOME，最后才猜相对位置（异地克隆不再崩）
+ROOT = (os.environ.get("HERMES_ROOT_FOR_TEST")
+        or os.environ.get("HERMES_HOME")
+        or os.path.join(os.path.dirname(__file__), "..", "..", "..", "hermes", "hermes-agent"))
+sys.path.insert(0, ROOT)
 
 from agent.turn_stop_gates import apply_stop_gates  # noqa: E402
 
@@ -91,8 +95,7 @@ ck("误判保护：拒绝服务 不触发", sg.continue_turn is False)
 # 6. C18d：计数必须按「轮」重置，否则一轮打满 cap 后同会话后续每轮直接放行。
 #    这是结构性断言 —— 直接读 conversation_loop.run_conversation 的源码，
 #    确认 reset 行写在 _run_conversation_turn 调用之前（打回补丁会被这条抓住）。
-LOOP = os.path.join(os.path.dirname(__file__), "..", "..", "..", "hermes", "hermes-agent",
-                    "agent", "conversation_loop.py")
+LOOP = os.path.join(ROOT, "agent", "conversation_loop.py")
 if os.path.exists(LOOP):
     src = open(LOOP, encoding="utf-8").read()
     i_reset = src.find("agent._purge_refusal_nudges = 0")

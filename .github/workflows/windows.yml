@@ -1,0 +1,97 @@
+name: windows
+
+# 真机 Windows 上的验证（GitHub Actions 的 windows-latest = Windows Server 2022）
+#
+# 为什么要这个：本机是 macOS，Windows 那两格兼容矩阵一直写着「CRLF 树闭环、实机未跑」。
+# 这个 workflow 用真的 Windows 跑：单元测试 + npm 打包自检 + install.ps1 + purge setup。
+# 跑绿了就能把矩阵里那两格改成「已实测」。
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 22]
+    name: win-node${{ matrix.node }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: 环境自述
+        shell: pwsh
+        run: |
+          node -v
+          npm -v
+          python --version
+          $PSVersionTable.PSVersion.ToString()
+
+      - name: 单元测试（1.x 引擎 / v2 / dsh 夹具 / setup / bench）
+        shell: pwsh
+        run: |
+          node test/smoke.js
+          node test/v2.js
+          node test/dsh.js
+          node test/setup.js
+          node test/bench.js
+
+      - name: npm 打包自检（真打包 + 解开跑 --version）
+        shell: pwsh
+        run: node test/package.js
+
+      - name: install.ps1 装到临时目录并跑起来
+        shell: pwsh
+        run: |
+          $dest = Join-Path $env:RUNNER_TEMP 'hp-install'
+          $bin  = Join-Path $env:RUNNER_TEMP 'hp-bin'
+          .\install.ps1 -Dest $dest -Bin $bin
+          if (-not (Test-Path (Join-Path $bin 'purge.cmd'))) { throw 'install.ps1 没写 purge.cmd' }
+          $v = & (Join-Path $bin 'purge.cmd') --version
+          Write-Host "purge --version = $v"
+          if ($v -ne (node -p "require('./package.json').version")) { throw '版本号不一致' }
+          & (Join-Path $bin 'purge.cmd') --help | Select-Object -First 5
+
+      - name: 造一棵假 Hermes 树，跑 purge setup --dry / uninstall
+        shell: pwsh
+        run: |
+          $root = Join-Path $env:RUNNER_TEMP 'hermes-agent'
+          New-Item -ItemType Directory -Force -Path (Join-Path $root 'hermes_cli') | Out-Null
+          New-Item -ItemType Directory -Force -Path (Join-Path $root 'agent') | Out-Null
+          Set-Content -Path (Join-Path $env:RUNNER_TEMP 'config.yaml') -Value "model:`n  default: fake"
+          Set-Content -Path (Join-Path $env:RUNNER_TEMP 'SOUL.md') -Value 'fake'
+          node bin/purge.js setup --dry --target=$root
+          if ($LASTEXITCODE -ne 0) { throw "setup --dry 退出码 $LASTEXITCODE" }
+          # 非交互环境不给 --yes：应当拒绝写入并退出 1
+          node bin/purge.js setup --target=$root
+          if ($LASTEXITCODE -ne 1) { throw "无 --yes 时应退出 1，实际 $LASTEXITCODE" }
+          node bin/purge.js uninstall --yes --target=$root
+          if ($LASTEXITCODE -ne 0) { throw "uninstall 退出码 $LASTEXITCODE" }
+
+      - name: 一键安装脚本的卸载路径
+        shell: pwsh
+        run: |
+          $dest = Join-Path $env:RUNNER_TEMP 'hp-install'
+          $bin  = Join-Path $env:RUNNER_TEMP 'hp-bin'
+          .\install.ps1 -Uninstall -Dest $dest -Bin $bin
+          if (Test-Path (Join-Path $bin 'purge.cmd')) { throw '卸载后 purge.cmd 还在' }
+
+      - name: CRLF 保真（Windows 上改写 .py 不能把换行搞坏）
+        shell: pwsh
+        run: |
+          $d = Join-Path $env:RUNNER_TEMP 'crlf'
+          New-Item -ItemType Directory -Force -Path $d | Out-Null
+          $f = Join-Path $d 'x.py'
+          [IO.File]::WriteAllText($f, "def f():`r`n    return 1`r`n")
+          node -e "const p=require('./lib/v2/platform');const r=p.readText(process.argv[1]);p.writeText(process.argv[1],'def f():\n    return 2',{eol:r.eol,bom:r.bom})" $f
+          $raw = [IO.File]::ReadAllText($f)
+          if ($raw -notmatch "`r`n") { throw 'CRLF 丢了' }
+          Write-Host 'CRLF 保真 OK'
