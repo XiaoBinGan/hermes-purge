@@ -1,5 +1,23 @@
 # Changelog
 
+## 3.1.3 —— 安装不再需要登录（Release 自举）
+
+问题：之前只给了 GitHub Packages 的装法，而那条路要求 `~/.npmrc` 里放 token —— 没登录 GitHub 的人装不了。
+clone 能装，但不是所有人都想 clone。
+
+改成：**所有安装入口都走公开 Release 资产，匿名可用**。
+
+```bash
+curl -fsSL https://github.com/XiaoBinGan/hermes-purge/releases/latest/download/install.sh | bash -s -- --setup --yes
+```
+
+- `install.sh` / `install.ps1` 增加**自举模式**：脚本不是从仓库里跑的时候，自己下载
+  `hermes-purge-src.tar.gz` / `.zip`（公开资产）并安装，不需要 git、不需要 token、不需要账号
+- Release 现在固定挂 5 个资产：`install.sh`、`install.ps1`、`hermes-purge.tgz`（版本无关的稳定别名）、
+  `hermes-purge-<ver>.tgz`、`hermes-purge-src.{tar.gz,zip}`
+- 新增 `scripts/release.sh`：一条命令产包 + 上传资产，避免手工漏传
+- GitHub Packages 保留但降级为「已登录用户的另一条路」，README 里明确标注
+
 ## 3.1.2 —— 发布到 GitHub Packages + 降风控元数据
 
 npm 公共源首次发布被平台侧的「发布权限审核」挡住（读接口 200、`PUT` 一律 403，

@@ -16,7 +16,9 @@ param(
   [switch]$Yes,
   [string]$Dest = (Join-Path $env:LOCALAPPDATA 'hermes-purge'),
   [string]$Bin  = (Join-Path $env:LOCALAPPDATA 'hermes-purge\bin'),
-  [string]$Repo = 'https://github.com/XiaoBinGan/hermes-purge.git'
+  [string]$Repo = 'https://github.com/XiaoBinGan/hermes-purge.git',
+  # 脚本不是从仓库里跑的时候，从 Release 下源码包（公开资产，不需要登录）
+  [string]$Version = 'latest'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -54,14 +56,24 @@ if (Test-Path (Join-Path $Src 'bin\purge.js')) {
     }
   }
 } else {
-  if (Test-Path (Join-Path $Dest '.git')) {
-    Say "更新 $Dest"
-    & git -C $Dest pull --ff-only | Out-Null
-  } else {
-    if (-not (Get-Command git -ErrorAction SilentlyContinue)) { Die ' 没有 git，且不是从仓库里跑的：请先 git clone。' }
-    & git clone --depth 1 $Repo $Dest | Out-Null
-    Say "已克隆到 $Dest"
-  }
+  # 没有仓库（例如直接下载 install.ps1 跑的）：下 Release 源码包，公开资产，无需登录
+  $gh = 'https://github.com/XiaoBinGan/hermes-purge'
+  if ($Version -eq 'latest') { $url = "$gh/releases/latest/download/hermes-purge-src.zip" }
+  else { $url = "$gh/releases/download/v$($Version.TrimStart('v'))/hermes-purge-src.zip" }
+  $tmpZip = Join-Path ([IO.Path]::GetTempPath()) ("hp-src-" + [Guid]::NewGuid().ToString('N') + ".zip")
+  $tmpDir = Join-Path ([IO.Path]::GetTempPath()) ("hp-src-" + [Guid]::NewGuid().ToString('N'))
+  Say "下载源码包：$url"
+  try {
+    Invoke-WebRequest $url -OutFile $tmpZip -UseBasicParsing -TimeoutSec 120
+  } catch { Die "下载失败：$url（$($_.Exception.Message)）" }
+  Expand-Archive $tmpZip -DestinationPath $tmpDir -Force
+  $srcDir = Get-ChildItem $tmpDir -Directory | Where-Object { Test-Path (Join-Path $_.FullName 'bin\purge.js') } | Select-Object -First 1
+  if (-not $srcDir) { Die '包结构不对：里面没有 bin/purge.js' }
+  if (Test-Path $Dest) { Remove-Item $Dest -Recurse -Force -ErrorAction SilentlyContinue }
+  New-Item -ItemType Directory -Path $Dest -Force | Out-Null
+  Copy-Item (Join-Path $srcDir.FullName '*') $Dest -Recurse -Force
+  Remove-Item $tmpZip, $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
+  Say "已安装到 $Dest（版本 $Version，无需登录）"
 }
 
 New-Item -ItemType Directory -Path $Bin -Force | Out-Null

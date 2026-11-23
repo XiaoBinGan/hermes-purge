@@ -4,7 +4,7 @@
 让模型被拒时自动重采样。31 条能力、四层落地（AST / 运行时 shim / 文本 / 配置）、
 改坏了能逐字节回滚。
 
-**一条命令安装，一条命令撤销。** 当前版本 **3.1.2** · 零依赖 · Node ≥18 · macOS + Windows 实测。
+**一条命令安装，一条命令撤销。** 当前版本 **3.1.3** · 零依赖 · Node ≥18 · macOS + Windows 实测。
 
 > 借鉴了 [dsh-purge](https://github.com/YuJunZhiXue/dsh-purge) 的一个判断（「不跟模型讲道理，直接改宿主」），
 > 但引擎、补丁清单、验证方式、CLI 都是为 Hermes 独立写的 —— 没有一行共享代码。逐条对账见下文「我们比它强在哪」。
@@ -25,22 +25,34 @@ cd hermes-purge
 
 ### 2. 一条命令装好并应用
 
-```bash
-npm i -g @xiaobingan/hermes-purge --registry=https://npm.pkg.github.com && purge setup --yes
-```
+**不需要 GitHub 账号、不需要 npm token、不需要登录** —— Release 资产是公开的：
 
 ```bash
-./install.sh --setup --yes                      # 或用仓库里的脚本（macOS / Linux）
+# macOS / Linux：下载安装脚本直接跑
+curl -fsSL https://github.com/XiaoBinGan/hermes-purge/releases/latest/download/install.sh | bash -s -- --setup --yes
 ```
 
 ```powershell
-.\install.ps1 -Setup -Yes                       # Windows（PowerShell）
+# Windows：下载 install.ps1 后运行
+irm https://github.com/XiaoBinGan/hermes-purge/releases/latest/download/install.ps1 -OutFile $env:TEMP\hp-install.ps1
+powershell -ExecutionPolicy Bypass -File $env:TEMP\hp-install.ps1 -Setup -Yes
 ```
 
-三个方式做的事一样：把 `purge` / `hp` 装进 PATH → 检测宿主 → 打印计划 → 应用并验证。
+也可以先 clone 再装（改代码即时生效，适合开发）：
 
-它会做四件事：把命令装进 PATH（`purge` / `hp`）→ 检测宿主 → 打印计划 → 应用并验证。
-想先看计划不写入：`./install.sh` 然后 `purge setup --dry`。
+```bash
+git clone -b main https://github.com/XiaoBinGan/hermes-purge.git
+cd hermes-purge && ./install.sh --setup --yes
+```
+
+或直接吃 npm 包（同样匿名）：
+
+```bash
+npm i -g https://github.com/XiaoBinGan/hermes-purge/releases/latest/download/hermes-purge.tgz
+purge setup --yes
+```
+
+四个方式做的事一样：把 `purge` / `hp` 装进 PATH → 检测宿主 → 打印计划 → 应用并验证。
 
 ### 3. 确认它在生效
 
@@ -254,19 +266,19 @@ purge setup
 | 把 `bin` 加进 PATH | 不想装包，只想少打几个字 | 见「方式三」 |
 
 **前置**：Node **≥ 18**（`node -v` 确认；用到内置 `fetch` / `WebSocket`）。零依赖，不需要 `npm install`。
-**发布渠道（唯一）**：GitHub Packages `@xiaobingan/hermes-purge@3.1.2`
+**发布渠道**：GitHub Release（**匿名可下，无需任何登录**）
 
-```bash
-npm i -g @xiaobingan/hermes-purge --registry=https://npm.pkg.github.com
-purge setup --yes
-```
+| 资产 | 用途 |
+|---|---|
+| `install.sh` / `install.ps1` | 一键安装脚本，自己会下源码包 |
+| `hermes-purge.tgz` | npm 包（版本无关的稳定 URL，始终指向最新） |
+| `hermes-purge-<ver>.tgz` | 同上的定版包 |
+| `hermes-purge-src.tar.gz` / `.zip` | 源码包（`install.sh` 自举时用它） |
 
-> 首次使用需在 `~/.npmrc` 写一行 `//npm.pkg.github.com/:_authToken=<带 read:packages 的 PAT>`。
-> 不想配 registry？直接用 Release 里的 tgz：
-> `npm i -g https://github.com/XiaoBinGan/hermes-purge/releases/download/v3.1.2/hermes-purge-3.1.2.tgz`
+`@xiaobingan/hermes-purge` 也发布在 GitHub Packages，但那条路要在 `~/.npmrc` 配 token，
+**只适合已登录 GitHub 的人**；普通用户请用上面的 Release 链接。
 
-公共 npm 源（registry.npmjs.org）**不发布** —— 首次发布时被平台侧发布权限审核挡住，
-决定放弃该渠道，功能与发布以本仓库 tag 与 GitHub Packages 为准。
+公共 npm 源（registry.npmjs.org）**不发布** —— 首次发布被平台侧发布权限审核挡住，已放弃该渠道。
 
 **动手之前先 `purge status`**。它只读、不写盘，先把这棵树的漂移基线记下来：
 

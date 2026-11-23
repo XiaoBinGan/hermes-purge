@@ -13,6 +13,8 @@
 set -euo pipefail
 
 REPO="${HERMES_PURGE_REPO:-https://github.com/XiaoBinGan/hermes-purge.git}"
+GH="${HERMES_PURGE_GH:-https://github.com/XiaoBinGan/hermes-purge}"
+VERSION="${HERMES_PURGE_VERSION:-latest}"
 DEST="${HERMES_PURGE_HOME:-$HOME/.hermes-purge}"
 BIN="${HERMES_PURGE_BIN:-$HOME/.local/bin}"
 MODE=install
@@ -25,6 +27,7 @@ for a in "$@"; do
     --setup) DO_SETUP=1 ;;
     --yes|-y) DO_SETUP=1; DO_YES=1 ;;
     --home=*) DEST="${a#*=}" ;;
+    --version=*) VERSION="${a#*=}" ;;
     --bin=*)  BIN="${a#*=}" ;;
     -h|--help)
       sed -n '2,/^set -euo pipefail/p' "$0" | sed 's/^# \{0,1\}//' | sed '$d'
@@ -66,9 +69,31 @@ if [ -f "$SRC/bin/purge.js" ]; then
     say "已链接 $DEST → $SRC"
   fi
 else
-  command -v git >/dev/null 2>&1 || die "没有 git，且不是从仓库里跑的：请先 git clone。"
-  [ -d "$DEST/.git" ] || git clone --depth 1 "$REPO" "$DEST"
-  say "已克隆到 $DEST"
+  # 没有仓库（例如 curl | bash 下载的脚本）：直接下 Release 里的源码包。
+  # Release 资产是公开的 —— 不需要任何登录、不需要 GitHub 账号、不需要 token。
+  if [ "$VERSION" = "latest" ]; then
+    SRC_URL="$GH/releases/latest/download/hermes-purge-src.tar.gz"
+  else
+    SRC_URL="$GH/releases/download/v${VERSION#v}/hermes-purge-src.tar.gz"
+  fi
+  TMPD="$(mktemp -d)"
+  trap 'rm -rf "$TMPD"' EXIT
+  say "下载源码包：$SRC_URL"
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL "$SRC_URL" -o "$TMPD/src.tar.gz" || die "下载失败：$SRC_URL"
+  elif command -v wget >/dev/null 2>&1; then
+    wget -qO "$TMPD/src.tar.gz" "$SRC_URL" || die "下载失败：$SRC_URL"
+  else
+    die "既没有 curl 也没有 wget。请手动下载 $SRC_URL 解开后，在目录里跑 ./install.sh"
+  fi
+  tar xzf "$TMPD/src.tar.gz" -C "$TMPD" || die "解压失败（包损坏？）"
+  SRC_DIR="$(find "$TMPD" -maxdepth 1 -type d -name 'hermes-purge-*' | head -1)"
+  [ -n "$SRC_DIR" ] || die "包结构不对：里面没有 hermes-purge-* 目录"
+  [ -f "$SRC_DIR/bin/purge.js" ] || die "包结构不对：没有 bin/purge.js"
+  mkdir -p "$DEST"
+  # 复制内容（保留 .git 之类不存在的也无所谓）
+  cp -R "$SRC_DIR"/. "$DEST"/
+  say "已安装到 $DEST（版本 ${VERSION}，无需登录）"
 fi
 
 mkdir -p "$BIN"
