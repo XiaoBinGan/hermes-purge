@@ -89,6 +89,28 @@ t('没有备份但 index.html 被改过时，uninstall 也能摘干净', () => {
   assert.ok(html.includes('</body>'), 'html 结构被破坏');
 });
 
+t('控制服务的 port/token 会被写进面板脚本（漏了就会 401）', () => {
+  const dir = makeDist('dist-token').dir;
+  desktop.install(dir, { report: 'X', version: '1', controlPort: 9123, controlToken: 'deadbeef' });
+  const src = fs.readFileSync(path.join(dir, 'purge-panel.js'), 'utf8');
+  assert.ok(src.includes('"token":"deadbeef"'), 'token 没写进去：' + (src.match(/"control":\{[^}]*\}/) || [''])[0]);
+  assert.ok(src.includes('"port":9123'));
+  desktop.uninstall(dir);
+});
+
+t('script 标签带内容指纹（避免 Electron 跑旧缓存）', () => {
+  const dir = makeDist('dist-cache').dir;
+  desktop.install(dir, { report: 'A', version: '1' });
+  const h1 = fs.readFileSync(path.join(dir, 'index.html'), 'utf8').match(/purge-panel\.js\?v=([0-9a-f]+)/);
+  assert.ok(h1, '没有指纹：' + fs.readFileSync(path.join(dir, 'index.html'), 'utf8').slice(-200));
+  desktop.install(dir, { report: 'B', version: '1' });
+  const html2 = fs.readFileSync(path.join(dir, 'index.html'), 'utf8');
+  const h2 = html2.match(/purge-panel\.js\?v=([0-9a-f]+)/);
+  assert.ok(h2 && h2[1] !== h1[1], '内容变了指纹没变');
+  assert.strictEqual((html2.match(/purge-panel\.js/g) || []).length, 1, '标签重复了');
+  desktop.uninstall(dir);
+});
+
 t('注入脚本不读布局（getBoundingClientRect 会把 Electron renderer 卡死）', () => {
   const src = desktop.panelSource('<html></html>', { version: 'x' });
   const hits = src.split('\n').filter((l) => l.includes('getBoundingClientRect') && !l.trim().startsWith('//'));

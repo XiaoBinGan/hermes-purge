@@ -1,5 +1,22 @@
 # Changelog
 
+## 3.0.6 —— 修面板按钮 401（token 没传到脚本）+ 脚本缓存穿透
+
+现象：控制台报 `127.0.0.1:9123/api/action 401 (Unauthorized)`，面板按钮点了没反应。
+
+两个独立原因：
+
+1. **token 没写进脚本**：`desktop.install()` 组 `panelSource()` 时只传了 `version/generatedAt`，
+   漏了 `controlPort/controlToken` → 面板里 `"control":{"port":9123,"token":""}` → 必然 401。
+2. **Electron 缓存旧脚本**：控制台同时出现两条注入日志（旧版 `（ul>li）` + 新版 `已注入`），
+   说明 `file://` 下的 `purge-panel.js` 被缓存了。
+
+修法：
+- `install()` 把 `controlPort/controlToken` 一并传给 `panelSource()`
+- `script` 标签带**内容指纹**：`purge-panel.js?v=<sha256 前 10 位>`，内容一变 URL 就变；
+  插入前先摘掉任意旧标签（幂等）
+- 测试 +2：token 必须写进脚本；内容变则指纹变且标签不重复
+
 ## 3.0.5 —— 修桌面端崩溃：注入脚本不再读布局
 
 现象：重启桌面端后侧边栏入口不出现，`~/.hermes/logs/desktop.log` 里是
