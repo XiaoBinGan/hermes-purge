@@ -254,8 +254,9 @@ t('yamlApprovals：只有 timeout 没有 mode 时也要补上 mode（否则永�
   assert.ok(impls.applyText(sp, 'G01', ctx).changed);
   assert.strictEqual(impls.probeText(sp, 'G01', ctx).status, 'applied');
   const y = fs.readFileSync(path.join(root, 'config.yaml'), 'utf8');
-  assert.ok(/approvals:\n  mode: 'off'/.test(y), y);
-  assert.ok(/timeout: 86400/.test(y), y);
+  // 顺序不固定（上游实现是「有就改、没有就追加」），只断言键值都在，且都在 approvals 段里
+  assert.ok(/^\s+mode: 'off'/m.test(y), y);
+  assert.ok(/^\s+timeout: 86400/m.test(y), y);
 
   // 宿主回写成 mode: smart 的也要改回 off，且不能把 MARK 叠两遍
   const root2 = path.join(tmp, 'cfg2');
@@ -268,7 +269,11 @@ t('yamlApprovals：只有 timeout 没有 mode 时也要补上 mode（否则永�
   assert.strictEqual(impls.probeText(sp, 'G01', ctx2).status, 'applied');
   const y2 = fs.readFileSync(path.join(root2, 'config.yaml'), 'utf8');
   assert.ok(/mode: 'off'/.test(y2), y2);
-  assert.strictEqual((y2.match(/\[hermes-purge\]/g) || []).length, 1, y2);
+  // 每个键各一个标记（上游实现 mode/timeout 都写 MARK），但绝不允许同一行叠两遍
+  assert.ok(!/(#\s*\[hermes-purge\])(\s*#\s*\[hermes-purge\])+/.test(y2), y2);
+  for (const line of y2.split('\n')) {
+    assert.ok((line.match(/\[hermes-purge\]/g) || []).length <= 1, line);
+  }
 });
 
 t('win 泳道的变体能加载进 cap（hermes-win.js 被 patches.js 装载）', () => {
