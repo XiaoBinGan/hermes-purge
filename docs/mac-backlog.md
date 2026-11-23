@@ -8,7 +8,10 @@
       → C15 永远 pending；追加路径的 approvals 风格不统一 → 一并修掉，测试 +2
 - [x] **`.env` 幂等 + 去重**（第 2 轮）：`appendEnv` 只看键不看值（`HERMES_APPROVAL_MODE=prompt`
       也算已生效）、`.env` 不存在时整条 cap 不可用 → 改成值感知 + 就地改写 + 缺文件自动创建
-- [ ] **`purge serve` launchd 守护**：macOS 开机自启，面板按钮不依赖手动起服务
+- [x] **`purge serve` launchd 守护**（第 3 轮）：新增 `purge agent install|status|uninstall`。
+      踩到两个坑：① 仓库在 ~/Documents 下，launchd 访问会卡在 TCC 授权（进程挂住、日志空白）
+      → 运行时自动复制到 `~/.hermes-purge/app`；② `bootstrap` 后 label 可能停留 disabled
+      → 补 `enable` + `kickstart -kp`，并做健康探测
 - [ ] **面板自动刷新**：宿主状态变化后（apply/revert）自动重建快照，不用手动 `desktop sync`
 - [ ] **`purge parity` 增加按层汇总**：不只逐条，给出「哪些层一致 / 哪层缺」
 - [ ] **0.21.3 真实样本验证**：找一棵 pristine 0.21.3 树跑 31/31（现在只有 0.21.0 / 0.21.4 实测）

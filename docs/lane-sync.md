@@ -13,7 +13,23 @@
 | 0.21.4 沙箱 | `31/31` · L1 14 / L2 14 · revert 逐字节还原 |
 | Windows 实机（0.21.x） | 28/31（C13/C14/C16 缺锚点）—— 由 win 泳道补齐 |
 
-## 本轮变更（第 2 轮 · `.env` 值感知）
+## 本轮变更（第 3 轮 · macOS 开机自启）
+
+新增 `purge agent install|status|uninstall`（**只实现 macOS launchd**；Windows 的计划任务由 win 泳道自己做，
+`lib/v2/agent.js` 里刻意没有 win32 分支）：
+
+- `purge agent install` 写 `~/Library/LaunchAgents/com.xiaobingan.hermes-purge.serve.plist`
+  （`RunAtLoad` + `KeepAlive`，日志到 `~/Library/Logs/hermes-purge-serve.log`），
+  然后 `bootout → enable → bootstrap → kickstart`，最后探测 `/api/health` 报就绪
+- 两个坑：① 仓库在 `~/Documents` 下时 launchd 会卡在 TCC 授权（进程挂住、日志空白）
+  → 运行时自动复制到 `~/.hermes-purge/app` 再让 plist 指向它；② 只 `bootstrap` 不 `enable`
+  的话 label 停在 disabled，服务不会起
+- 人工验收：`uninstall → install` 后打印「控制服务已就绪」，`/api/health` 返回 **200**，`agent status` 显示运行中 pid
+- `test/agent.js` 4 项（键齐全 / 参数顺序 / 路径 / XML 转义）
+
+验证：全量 41+30+33+12+16+10+7+12+4+9+2+4+DOM 全绿；本机 31/31。
+
+### 上一轮（第 2 轮 · `.env` 值感知）
 
 **mac 侧仍只改 `lib/v2/impls.js`（Windows 不必动这里）：**
 

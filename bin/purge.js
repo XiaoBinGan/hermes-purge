@@ -62,6 +62,7 @@ function usageText() {
     '  purge desktop [install|sync|uninstall|status]  在桌面端侧边栏加一个「hermes-purge 状态」入口',
     '  purge parity [--out=F] [--diff=F]  导出/对比两台机器的「效果指纹」（mac ↔ win 对账用）',
     '  purge serve [--port=9123]    起本地控制服务，让面板上的「启用/停用/体检/刷新」按钮可用',
+    '  purge agent [install|status|uninstall]  macOS 开机自启（launchd），让控制服务常驻',
     '  purge stats [--json] [--since=ISO]  观测：轮次、拒答收敛、cap 命中、成本',
     '',
     '  --target=DIR   指定宿主目录（默认自动探测，或 HERMES_HOME / DSH_HOME）',
@@ -547,9 +548,128 @@ function cmdReport() {
 
 /* ───────────── 本地控制服务（给桌面面板的按钮用）───────────── */
 
+/* ───────── 开机自启（macOS launchd）───────── */
+/* Windows 侧对应的是计划任务，由 win 泳道自己实现，这里不写 win32 分支。 */
+
+function cmdAgent() {
+  const agent = require('../lib/v2/agent');
+  const { spawnSync } = require('child_process');
+  const sub = args._[1] || 'status';
+  const port = args.port && args.port !== true ? Number(args.port) : 9123;
+  const file = agent.plistPath();
+  const run = (cmd, argv) => spawnSync(cmd, argv, { encoding: 'utf8' });
+
+  if (process.platform !== 'darwin') {
+    console.log('这个子命令只实现 macOS（launchd）。' + process.platform + ' 上的开机自启由各自泳道实现。');
+    return;
+  }
+
+  if (sub === 'install') {
+    // 关键：launchd 里的进程没有会话，访问 ~/Documents、~/Desktop、~/Downloads
+    // 会卡在 TCC 授权上（open() 直接挂住，日志一片空白）。
+    // 所以常驻服务必须跑在不受保护的位置：优先用安装目录，必要时把运行时复制过去。
+    const home = process.env.HERMES_PURGE_HOME || path.join(os.homedir(), '.hermes-purge');
+    const protectedDirs = ['Documents', 'Desktop', 'Downloads'].map((d) => path.join(os.homedir(), d));
+    const srcDir = path.join(__dirname, '..');
+    const inProtected = protectedDirs.some((d) => srcDir === d || srcDir.startsWith(d + path.sep));
+
+    let runtime = path.join(home, 'app');
+    const runtimeCli = path.join(runtime, 'bin', 'purge.js');
+    if (inProtected || !fs.existsSync(runtimeCli)) {
+      fs.mkdirSync(runtime, { recursive: true });
+      for (const part of ['bin', 'lib', 'adapters', 'payload', 'package.json']) {
+        const from = path.join(srcDir, part);
+        if (!fs.existsSync(from)) continue;
+        fs.cpSync(from, path.join(runtime, part), { recursive: true, force: true });
+      }
+      if (inProtected) {
+        console.log('注意：当前仓库在受保护目录（' + path.basename(protectedDirs.find((d) => srcDir.startsWith(d))) + '），');
+        console.log('      launchd 访问那里会卡在系统授权上，已把运行时复制到 ' + runtime);
+      }
+    }
+
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, agent.plist({
+      node: process.execPath, cli: path.join(runtime, 'bin', 'purge.js'),
+      target: TARGET, port,
+    }), 'utf8');
+    const uid = process.getuid ? process.getuid() : 0;
+    const domain = 'gui/' + uid;
+    const label = require('../lib/v2/agent').LABEL;
+    // 先卸掉旧的（不存在会报错，忽略），再 enable + bootstrap ——
+    // 只 load 不 enable 的话，之前卸过一次的 label 会停在 disabled，bootstrap 后也不启动。
+    run('launchctl', ['bootout', domain + '/' + label]);
+    run('launchctl', ['unload', file]);
+    const en = run('launchctl', ['enable', domain + '/' + label]);
+    const bs = run('launchctl', ['bootstrap', domain, file]);
+    // bootstrap 之后 label 可能仍是 not running（尤其刚 bootout 过），补一次 kickstart
+    run('launchctl', ['kickstart', '-kp', domain + '/' + label]);
+    let ok = bs.status === 0;
+    if (!ok) {
+      const legacy = run('launchctl', ['load', '-w', file]);   // 老系统兜底
+      ok = legacy.status === 0;
+    }
+    console.log((ok ? '已装成开机自启：' : '加载失败：') + file);
+    if (!ok) console.log(((bs.stderr || '') + (en.stderr || '')).trim());
+
+    // 起来没起来，等一小会儿再报，别让用户自己去猜
+    const http = require('http');
+    const control = require('../lib/v2/control');
+    const tok = (control.loadState(TARGET) || {}).token || '';
+    let tries = 0;
+    const probe = () => {
+      tries++;
+      const req = http.request({ host: '127.0.0.1', port, path: '/api/health', headers: { 'x-purge-token': tok }, timeout: 800 }, (res) => {
+        res.resume();
+        console.log(res.statusCode === 200
+          ? '  控制服务已就绪：http://127.0.0.1:' + port
+          : '  控制服务返回 ' + res.statusCode + '，看日志：' + agent.logPath());
+      });
+      req.on('error', () => {
+        if (tries < 10) return setTimeout(probe, 400);
+        console.log('  服务暂时没响应，看日志：' + agent.logPath());
+      });
+      req.on('timeout', () => req.destroy());
+      req.end();
+    };
+    probe();
+    console.log('  服务地址 http://127.0.0.1:' + port + '（只监听本机）');
+    console.log('  日志     ' + agent.logPath());
+    console.log('  查看状态 purge agent status    卸载：purge agent uninstall');
+    return;
+  }
+
+  if (sub === 'uninstall') {
+    const uid = process.getuid ? process.getuid() : 0;
+    run('launchctl', ['bootout', 'gui/' + uid + '/' + require('../lib/v2/agent').LABEL]);
+    run('launchctl', ['unload', file]);
+    if (fs.existsSync(file)) fs.unlinkSync(file);
+    console.log('已移除开机自启：' + file);
+    return;
+  }
+
+  // status
+  const list = run('launchctl', ['list']);
+  const line = (list.stdout || '').split('\n').find((l) => l.includes(agent.LABEL));
+  console.log('plist    ' + file + (fs.existsSync(file) ? '  （存在）' : '  （不存在）'));
+  if (line) {
+    const [pid, code] = line.trim().split(/\s+/);
+    console.log('运行中   pid=' + (pid === '-' ? '（未运行）' : pid) + ' 最后退出码=' + code);
+  } else {
+    console.log('运行中   未加载');
+  }
+  console.log('日志     ' + agent.logPath());
+}
+
 function cmdServe() {
   const control = require('../lib/v2/control');
   const want = args.port && args.port !== true ? Number(args.port) : 9123;
+
+  // --install-agent：装好 launchd 后不再前台常驻
+  if (args['install-agent']) {
+    args._ = ['agent', 'install'];
+    return cmdAgent();
+  }
   const { server, token } = control.start({
     target: TARGET,
     cliPath: path.join(__dirname, 'purge.js'),
@@ -867,6 +987,7 @@ switch (cmd) {
   case 'plugin': cmdPlugin(); break;
   case 'desktop': cmdDesktop(); break;
   case 'serve': cmdServe(); break;
+  case 'agent': cmdAgent(); break;
   case 'stats': cmdStats(); break;
   case 'setup': cmdSetup(); break;
   case 'uninstall': cmdUninstall(); break;
