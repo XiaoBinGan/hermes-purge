@@ -279,6 +279,30 @@ function shimRelPaths() {
   return out || [];
 }
 
+/* ───────── 面板快照自动刷新 ─────────
+ * 面板里嵌的是一份静态快照，apply/revert 之后不刷新就会显示旧状态。
+ * 这里在状态变化后自动重建（只在面板确实装了的时候，失败也不影响主流程）。
+ */
+function refreshPanelSnapshot(why) {
+  if (args['no-panel-sync']) return;
+  try {
+    const desktop = require('../lib/v2/desktop');
+    const alive = desktop.findDists(TARGET).filter((d) => desktop.status(d).installed);
+    if (!alive.length) return;
+    const { html, generatedAt } = buildReportHtml();
+    const ctl = require('../lib/v2/control').ensureState(TARGET, {});
+    for (const d of alive) {
+      desktop.sync(d, {
+        report: html, version: pkgVersion(), generatedAt,
+        controlPort: ctl.port, controlToken: ctl.token,
+      });
+    }
+    console.log(C.dim + '面板快照已刷新（' + why + '）' + C.reset);
+  } catch (e) {
+    console.log(C.dim + '面板快照刷新跳过：' + e.message + C.reset);
+  }
+}
+
 function cmdApply() {
   const dry = !!args.dry;
   const rels = new Set();
@@ -376,6 +400,7 @@ function cmdApply() {
       for (const b of bad.slice(0, 5)) console.log('  ' + paint('✖', C.r) + ' ' + b.name + ' ' + b.detail);
     }
     console.log('\n回滚：purge revert   体检：purge doctor');
+    if (changed > 0) refreshPanelSnapshot('apply');
   } else if (dry) {
     console.log('\n（预演，未写盘）' + changed + ' 条可落');
   }
@@ -435,6 +460,7 @@ function cmdRevert() {
     console.log(C.dim + '  要连配置一起回滚：purge revert --force' + C.reset);
   }
   console.log('回滚 ' + r.restored.length + ' 个文件（sha256 已校验）');
+  if (r.restored.length) refreshPanelSnapshot('revert');
   for (const f of r.restored) console.log('  ' + paint('↩', C.y) + ' ' + f);
   metrics.record(TARGET, { event: 'revert', restored: r.restored.length });
 }

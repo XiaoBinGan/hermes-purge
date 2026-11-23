@@ -12,7 +12,8 @@
       踩到两个坑：① 仓库在 ~/Documents 下，launchd 访问会卡在 TCC 授权（进程挂住、日志空白）
       → 运行时自动复制到 `~/.hermes-purge/app`；② `bootstrap` 后 label 可能停留 disabled
       → 补 `enable` + `kickstart -kp`，并做健康探测
-- [ ] **面板自动刷新**：宿主状态变化后（apply/revert）自动重建快照，不用手动 `desktop sync`
+- [x] **面板自动刷新**（第 4 轮）：apply/revert 真的改了东西时自动重建面板快照（`--no-panel-sync` 可关，
+      面板没装时静默跳过，刷新失败不影响主流程）
 - [ ] **`purge parity` 增加按层汇总**：不只逐条，给出「哪些层一致 / 哪层缺」
 - [ ] **0.21.3 真实样本验证**：找一棵 pristine 0.21.3 树跑 31/31（现在只有 0.21.0 / 0.21.4 实测）
 - [ ] **大仓性能**：`purge status` 在 6000+ 行文件上的耗时（现在没量过）

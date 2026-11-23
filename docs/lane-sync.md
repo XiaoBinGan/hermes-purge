@@ -13,7 +13,22 @@
 | 0.21.4 沙箱 | `31/31` · L1 14 / L2 14 · revert 逐字节还原 |
 | Windows 实机（0.21.x） | 28/31（C13/C14/C16 缺锚点）—— 由 win 泳道补齐 |
 
-## 本轮变更（第 3 轮 · macOS 开机自启）
+## 本轮变更（第 4 轮 · 面板快照自动刷新）
+
+以前 apply/revert 之后面板还显示旧结论，得手动 `purge desktop sync`。现在：
+
+- `purge apply` / `purge revert` 在**确实改了文件**时自动重建面板快照，并打印
+  `面板快照已刷新（apply）`
+- 面板没装 → 静默跳过；刷新出错 → 只打一行提示，不影响 apply/revert 本身
+- `--no-panel-sync` 可关闭（脚本里想完全控制时用）
+- 真机核对过 dist 发现逻辑：`findDists()` 在宿主里同时找到 `apps/desktop/dist` 与
+  打包版 `…/app.asar.unpacked/dist`，两个都判为已安装
+
+`test/panel-sync.js` 4 项（没装不写 / apply 刷新 / revert 刷新 / --no-panel-sync 生效）。
+
+验证：全量 41+30+33+12+16+10+7+12+4+9+2+4+4+DOM 全绿；本机 31/31。
+
+### 上一轮（第 3 轮 · macOS 开机自启）
 
 新增 `purge agent install|status|uninstall`（**只实现 macOS launchd**；Windows 的计划任务由 win 泳道自己做，
 `lib/v2/agent.js` 里刻意没有 win32 分支）：
