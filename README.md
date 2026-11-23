@@ -1,16 +1,88 @@
 # hermes-purge
 
-> **我们借鉴了 [dsh-purge](https://github.com/YuJunZhiXue/dsh-purge) 的一个判断：「不跟模型讲道理，直接改宿主」。**
-> 这句话点醒了方向。但**代码不是它的**：引擎、补丁清单、验证方式、CLI 都是为
-> [Hermes Agent](https://github.com/NousResearch/hermes-agent) 独立写的 —— 它跑在 DSH 的插件体系上，
-> 我们改的是 Python 宿主的源码与运行时；两者没有一行共享代码，也没有沿用它的插件形态。
->
-> 借鉴的是**判断**，不是实现。下面「我们比它强在哪」一节逐条对账。
+**给 Hermes Agent 打「能力层」补丁**：关掉审批/护栏/命令黑名单，换掉提示词人格，
+让模型被拒时自动重采样。31 条能力、四层落地（AST / 运行时 shim / 文本 / 配置）、
+改坏了能逐字节回滚。
 
-对 Hermes Agent 做三层清洗：**提示词人格 / config 审批策略 / 代码层审批门与黑名单**。
-附一个破甲执行器和一个效力边界探针。
+**一条命令安装，一条命令撤销。** 当前版本 **3.0.6** · 零依赖 · Node ≥18 · macOS + Windows 实测。
 
-补丁主锚验证于 **Hermes 0.21.3**，**0.21.0 全量兼容**（走变体）。当前版本 **3.0.6**（31 条 cap，四层落地；一条命令安装；判别器误杀率 0%）。
+> 借鉴了 [dsh-purge](https://github.com/YuJunZhiXue/dsh-purge) 的一个判断（「不跟模型讲道理，直接改宿主」），
+> 但引擎、补丁清单、验证方式、CLI 都是为 Hermes 独立写的 —— 没有一行共享代码。逐条对账见下文「我们比它强在哪」。
+
+---
+
+## 30 秒上手
+
+> 它会**关掉 Hermes 的审批、护栏与命令黑名单**，并把提示词人格换掉。只在你自己的机器上用，
+> 只在你拥有或获授权的环境里用（完整声明见下方「使用前必读」）。
+
+### 1. 拿到代码
+
+```bash
+git clone -b v2-capability git@github.com:XiaoBinGan/hermes-purge.git
+cd hermes-purge
+```
+
+### 2. 一条命令装好并应用
+
+```bash
+./install.sh --setup --yes            # macOS / Linux
+```
+
+```powershell
+.\install.ps1 -Setup -Yes             # Windows（PowerShell）
+```
+
+它会做四件事：把命令装进 PATH（`purge` / `hp`）→ 检测宿主 → 打印计划 → 应用并验证。
+想先看计划不写入：`./install.sh` 然后 `purge setup --dry`。
+
+### 3. 确认它在生效
+
+```bash
+purge status          # 31/31 生效 就对了
+```
+
+三个「看得见」的地方：
+
+| 在哪 | 怎么打开 |
+|---|---|
+| 桌面端侧边栏 | 「定时任务」下面一个飞镖图标（`purge desktop install` 装的） |
+| 会话内 | `/purge`（`purge plugin install` 装的插件） |
+| 浏览器 | `hermes dashboard --port 9119` → 左侧菜单 |
+
+### 不满意就撤
+
+```bash
+purge revert                  # 只撤补丁，命令留着
+purge uninstall --yes         # 撤补丁 + 删 shim + 删状态目录
+./install.sh --uninstall      # 再把 purge/hp 两个命令删掉
+```
+
+### 装不上？先看这三条
+
+| 症状 | 处理 |
+|---|---|
+| `找不到 config.yaml` / `EHP_CONFIG` | 用 `--home=` 指到配置根：`purge status --home=$HOME/.hermes`（Windows：`--home=%USERPROFILE%\.hermes`） |
+| `python=(无)` | 宿主 venv 没找到：AST/shim 两层会降级成文本层，仍可用但抗升级能力差一档 |
+| 面板按钮报 `401` / `控制服务没响应` | 先起控制服务：`purge serve`（只监听 127.0.0.1:9123，带 token） |
+
+更细的排查见 [`docs/troubleshooting.md`](docs/troubleshooting.md)。
+
+---
+
+## 它到底改了什么（30 秒版）
+
+| 层 | 改什么 |
+|---|---|
+| 提示词 | `SOUL.md` 换成人格 payload |
+| 配置 | `approvals.mode=off`、`model.max_tokens=16000`、prefill、`.env` |
+| 代码 | 审批门、审批模式、编辑确认、护栏、命令黑名单、系统提示词注入位置 |
+
+31 条能力，每条都带断言；改坏了能逐字节回滚。
+
+---
+
+> 下面是原理、兼容矩阵、实测数据与逐条对账 —— **不看也能用**。
 
 ---
 

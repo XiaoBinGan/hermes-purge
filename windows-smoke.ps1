@@ -58,6 +58,22 @@ try {
     Write-Host "   purge --version = $v"
   }
 
+  Step 'install.ps1 -Setup -Yes（一条命令装完即应用）' {
+    $h = Join-Path $tmp 'oneshot'
+    $dest2 = Join-Path $h 'app'; $bin2 = Join-Path $h 'bin'
+    $tree2 = Join-Path $h 'host\hermes-agent'
+    New-Item -ItemType Directory -Force -Path (Join-Path $tree2 'hermes_cli'), (Join-Path $tree2 'agent') | Out-Null
+    Set-Content -Path (Join-Path $h 'host\config.yaml') -Value "model:`n  default: fake"
+    $env:HERMES_HOME = Join-Path $h 'host'
+    $o = & (Join-Path $root 'install.ps1') -Dest $dest2 -Bin $bin2 -Setup -Yes 2>&1 | Out-String
+    $code = $LASTEXITCODE
+    $env:HERMES_HOME = $null
+    if ($o -notmatch 'purge setup') { throw "没有跑到 purge setup：$o" }
+    if ($o -notmatch 'cap\s+\d+ 条') { throw "setup 没打印 cap 统计：$o" }
+    Write-Host "   install.ps1 -Setup -Yes → exit=$code（假宿主下 apply 会跳过不可用项，属预期）"
+    if (-not (Test-Path (Join-Path $bin2 'purge.cmd'))) { throw '没装出 purge.cmd' }
+  }
+
   Step '假 Hermes 树：setup --dry / 非交互拒绝 / uninstall' {
     $tree = Join-Path $tmp 'hermes-agent'
     New-Item -ItemType Directory -Force -Path (Join-Path $tree 'hermes_cli'), (Join-Path $tree 'agent') | Out-Null

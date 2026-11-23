@@ -11,6 +11,9 @@
 #>
 param(
   [switch]$Uninstall,
+  # 装完直接跑 purge setup（等价于 POSIX 的 --setup）；-Yes 表示不问确认
+  [switch]$Setup,
+  [switch]$Yes,
   [string]$Dest = (Join-Path $env:LOCALAPPDATA 'hermes-purge'),
   [string]$Bin  = (Join-Path $env:LOCALAPPDATA 'hermes-purge\bin'),
   [string]$Repo = 'https://github.com/XiaoBinGan/hermes-purge.git'
@@ -73,6 +76,16 @@ $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
 if ($userPath -split ';' -notcontains $Bin) {
   Warn "注意：$Bin 不在用户 PATH 里。把下面一行加到 PATH（或重启终端后手动加）："
   Warn "  [Environment]::SetEnvironmentVariable('Path', [Environment]::GetEnvironmentVariable('Path','User') + ';$Bin', 'User')"
+}
+
+if ($Setup -or $Yes) {
+  Say ''
+  Say '—— 装完了，直接跑 purge setup ——'
+  $env:PATH = "$Bin;$env:PATH"
+  $setupArgs = @((Join-Path $Dest 'bin\purge.js'), 'setup')
+  if ($Yes) { $setupArgs += '--yes' }
+  & node @setupArgs
+  exit $LASTEXITCODE
 }
 
 Say ''
