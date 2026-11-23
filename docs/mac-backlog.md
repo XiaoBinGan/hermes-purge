@@ -29,3 +29,9 @@
 - [x] **文档**（第 8 轮）：`docs/troubleshooting.md` 增补第 7 节 —— 3.1.x 在真机上踩到并修掉的
       五类故障（sentinel 不匹配 / config 叠注释·mode 不改 / .env 值不改 / launchd TCC /
       status 慢），每条给「判据命令 + 修法 + 对应回归测试」；速查表补 6 行
+
+## 追加（第 13 轮，自查发现的缺陷）
+
+- [x] **面板快照过期检测**：改代码/改文档不走 apply，快照会一直是旧版本（用户看到过期结论）。
+      `doctor` 与 `desktop status` 现在会报「过期（面板里是 X，当前 Y）→ purge desktop sync」；
+      `test/panel-stale.js` 4 项锁住

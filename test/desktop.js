@@ -124,7 +124,10 @@ t('注入脚本不读布局（getBoundingClientRect 会把 Electron renderer 卡
 });
 
 t('status 能报出安装状态与备份', () => {
-  assert.deepStrictEqual(desktop.status(a.dir), { distDir: a.dir, installed: false, hasBackup: false });
+  const empty = desktop.status(a.dir);
+  assert.strictEqual(empty.distDir, a.dir);
+  assert.strictEqual(empty.installed, false);
+  assert.strictEqual(empty.hasBackup, false);
   desktop.install(a.dir, { report: 'x' });
   const st = desktop.status(a.dir);
   assert.strictEqual(st.installed, true);

@@ -790,6 +790,11 @@ function cmdDesktop() {
     console.log(d);
     console.log('  面板    ' + (st.installed ? '已安装' : '未安装'));
     console.log('  备份    ' + (st.hasBackup ? '有（可 uninstall 还原）' : '无'));
+    if (st.installed && st.snapshotVersion) {
+      const stale = require('../lib/v2/desktop').isStale(d, pkgVersion());
+      console.log('  快照    ' + st.snapshotVersion + ' · ' + st.snapshotAt +
+        (stale ? paint('  已过期 → purge desktop sync', C.y) : paint('  与当前版本一致', C.g)));
+    }
   }
 }
 
@@ -800,6 +805,20 @@ function cmdDoctor() {
   for (const c of rep.checks) {
     console.log('  ' + (c.ok ? paint('✔', C.g) : paint('✖', C.r)) + ' ' + c.name.padEnd(16) + ' ' + C.dim + c.detail + C.reset);
   }
+  // 面板里嵌的是静态快照；版本升级后它会一直是旧的（用户看到的是过期结论）
+  try {
+    const desktop = require('../lib/v2/desktop');
+    const dists = desktop.findDists(TARGET).filter((d) => desktop.status(d).installed);
+    if (dists.length) {
+      const stale = dists.filter((d) => desktop.isStale(d, pkgVersion()));
+      const info = desktop.status(dists[0]);
+      console.log('  ' + (stale.length ? paint('✖', C.y) : paint('✔', C.g)) + ' ' + '面板快照'.padEnd(16) + ' ' +
+        C.dim + (stale.length
+          ? '过期：面板里是 ' + info.snapshotVersion + '（' + info.snapshotAt + '），当前 ' + pkgVersion() + ' → purge desktop sync'
+          : '与当前版本一致（' + info.snapshotVersion + ' · ' + info.snapshotAt + '）') + C.reset);
+    }
+  } catch (e) { /* 面板没装或读不到，跳过 */ }
+
   // 配置文件的哈希一定会被宿主改（它会重写序列化），所以单独看语义：直接跑配置层 cap
   const cfgCaps = CAPS.filter((cap) => cap.layer === 'config');
   if (cfgCaps.length) {
