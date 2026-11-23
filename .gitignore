@@ -26,3 +26,4 @@ desktop.ini
 # 测试临时文件
 *.tmp
 *.bak
+*.tgz
