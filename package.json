@@ -1,6 +1,6 @@
 {
   "name": "hermes-purge",
-  "version": "3.1.4",
+  "version": "3.1.5",
   "description": "宿主无关的能力层（capability）引擎 —— adapter 注册表 + AST/shim/文本/配置 四层落地，内置 Hermes Agent 与 DeepSeek Harness 两个 adapter；事务回滚 + 三级验证 + 观测。跨 macOS / Windows。",
   "license": "MIT",
   "author": "XiaoBinGan",
@@ -52,7 +52,7 @@
     "apply": "node bin/hermes-purge.js --apply",
     "verify": "node bin/hermes-purge.js --verify",
     "revert": "node bin/hermes-purge.js --revert",
-    "test": "node test/smoke.js && node test/v2.js && node test/dsh.js && node test/setup.js && node test/bench.js && node test/plugin.js && node test/control.js && node test/desktop.js && node test/desktop-dom.js",
+    "test": "node test/smoke.js && node test/v2.js && node test/dsh.js && node test/setup.js && node test/bench.js && node test/plugin.js && node test/control.js && node test/desktop.js && node test/desktop-dom.js && node test/parity.js",
     "test:package": "node test/package.js",
     "test:dsh": "node test/dsh.js",
     "v2": "node bin/purge.js",
@@ -62,7 +62,8 @@
     "judge": "node bench/judge-eval.js",
     "test:plugin": "node test/plugin.js",
     "test:desktop": "node test/desktop.js",
-    "test:control": "node test/control.js"
+    "test:control": "node test/control.js",
+    "test:parity": "node test/parity.js"
   },
   "engines": {
     "node": ">=18"
