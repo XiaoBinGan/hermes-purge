@@ -13,7 +13,27 @@
 | 0.21.4 沙箱 | `31/31` · L1 14 / L2 14 · revert 逐字节还原 |
 | Windows 实机（0.21.x） | 28/31（C13/C14/C16 缺锚点）—— 由 win 泳道补齐 |
 
-## 本轮变更（第 5 轮 · parity 按层汇总）
+## 本轮变更（第 6 轮 · 多版本真实样本）
+
+**0.21.3 拿不到 pristine 样本**（证据）：上游远端没有 `v0.21.3` 标签，只有
+`abandoned-rc.*-v0.21.5/6/7`；PyPI 上 `hermes-agent` 最新只到 0.19.0。
+
+改用**可得的真实样本**：`git fetch --depth 1 origin refs/tags/abandoned-rc.10-v0.21.5`
+→ `git archive` 取 pristine 树：
+
+| 项 | 结果 |
+|---|---|
+| anchors | `31 pending · 0 drifted`（主锚全命中，不需要新变体） |
+| apply | `31/31 applied` |
+| L1 | ✔ 14 项通过 |
+| revert | 代码文件与 pristine **逐字节一致** |
+| L2 | 未跑 —— 该树 import `tools.approval` 需要 `ruamel.yaml`，沙箱 python 没装（环境限制，与本补丁无关） |
+
+README 兼容矩阵加了 0.21.5 一行（如实标注 L2 未跑的原因）。
+
+验证：全量 41+30+33+12+16+10+7+12+4+9+2+4+4+3+DOM 全绿；本机 31/31。
+
+### 上一轮（第 5 轮 · parity 按层汇总）
 
 `purge parity` 的指纹升到 **schema 2**：每条形如 `{id, cap, layer, status, impl}`，另加 `layers` 汇总。
 

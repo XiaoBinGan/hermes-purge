@@ -16,6 +16,9 @@
       面板没装时静默跳过，刷新失败不影响主流程）
 - [x] **`purge parity` 按层汇总**（第 5 轮）：指纹加 `layers`（code/config/prompt 各自 applied/total），
       `--diff` 先输出「哪层缺、缺哪几条」再逐条列；老的 schema=1 指纹仍能比
-- [ ] **0.21.3 真实样本验证**：找一棵 pristine 0.21.3 树跑 31/31（现在只有 0.21.0 / 0.21.4 实测）
+- [x] **0.21.3 样本**（第 6 轮）：上游没有 `v0.21.3` 标签（只有 `abandoned-rc.*-v0.21.5/6/7`），
+      PyPI 上 `hermes-agent` 最高也只到 0.19.0 —— **0.21.3 拿不到 pristine 样本**。
+      改用可得的 `abandoned-rc.10-v0.21.5` 做真实样本：`31/31 applied`、L1 14 项通过、
+      `revert` 代码逐字节还原；L2 因沙箱缺 `ruamel.yaml` 未跑（环境限制）
 - [ ] **大仓性能**：`purge status` 在 6000+ 行文件上的耗时（现在没量过）
 - [ ] **文档**：`docs/troubleshooting.md` 补 3.1.x 遇到的新故障（sentinel / config 叠注释）
