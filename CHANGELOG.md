@@ -1,5 +1,23 @@
 # Changelog
 
+## 3.1.4 —— 双端并行：锚点按泳道拆文件，结构上不可能冲突
+
+macOS 与 Windows 现在各管一台机器，要求「绝对不能冲突」。光靠约定不够，所以把**唯一会共同编辑的文件拆开了**：
+
+- 新增 `lib/anchors/hermes-0.21.0.js`（**只由 mac 泳道改**）—— 原来的 `V0210_MAP` 原样搬过去
+- 新增 `lib/anchors/hermes-win.js`（**只由 win 泳道改**）—— 初始为 `{ label: 'win-lane', map: {} }`，
+  Windows 侧把它填成宿主真实版本的替代锚点即可
+- `lib/patches.js` 退化成**只读装载器**：`require` 两个锚点文件并把各自的 `map` 并进 `variants`
+  （用 `concat`，不再覆盖）
+
+这样两条线改的是不同文件，`git merge` 时连冲突的可能性都没有。
+
+配套：
+
+- `docs/lanes.md`：分支约定（`lane/mac` / `lane/win` / `main` 只做集成）、文件归属表、加锚点的写法
+- 版本号只在集成方改，泳道分支不碰 —— 去掉最常见的必冲突项
+- 联调验证：重构后本机 31/31 不变、全量 41+30+33+12+16+10+7+12+DOM 全绿、package 16/16
+
 ## 3.1.3 —— 安装不再需要登录（Release 自举）
 
 问题：之前只给了 GitHub Packages 的装法，而那条路要求 `~/.npmrc` 里放 token —— 没登录 GitHub 的人装不了。
