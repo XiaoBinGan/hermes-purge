@@ -26,7 +26,7 @@ cd hermes-purge
 ### 2. 一条命令装好并应用
 
 ```bash
-npm i -g hermes-purge && purge setup --yes      # 任意平台（npm 审核通过后可用）
+npm i -g @xiaobingan/hermes-purge --registry=https://npm.pkg.github.com && purge setup --yes
 ```
 
 ```bash
@@ -254,14 +254,19 @@ purge setup
 | 把 `bin` 加进 PATH | 不想装包，只想少打几个字 | 见「方式三」 |
 
 **前置**：Node **≥ 18**（`node -v` 确认；用到内置 `fetch` / `WebSocket`）。零依赖，不需要 `npm install`。
-**已发布到 GitHub Packages**：`@xiaobingan/hermes-purge@3.1.2`
+**发布渠道（唯一）**：GitHub Packages `@xiaobingan/hermes-purge@3.1.2`
 
 ```bash
 npm i -g @xiaobingan/hermes-purge --registry=https://npm.pkg.github.com
 purge setup --yes
 ```
 
-（npm 公共源那边首次发布卡在平台侧的发布权限审核，恢复后再补发 `hermes-purge`；功能以本仓库 tag 为准。）
+> 首次使用需在 `~/.npmrc` 写一行 `//npm.pkg.github.com/:_authToken=<带 read:packages 的 PAT>`。
+> 不想配 registry？直接用 Release 里的 tgz：
+> `npm i -g https://github.com/XiaoBinGan/hermes-purge/releases/download/v3.1.2/hermes-purge-3.1.2.tgz`
+
+公共 npm 源（registry.npmjs.org）**不发布** —— 首次发布时被平台侧发布权限审核挡住，
+决定放弃该渠道，功能与发布以本仓库 tag 与 GitHub Packages 为准。
 
 **动手之前先 `purge status`**。它只读、不写盘，先把这棵树的漂移基线记下来：
 

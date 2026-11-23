@@ -3,7 +3,8 @@
 ## 3.1.2 —— 发布到 GitHub Packages + 降风控元数据
 
 npm 公共源首次发布被平台侧的「发布权限审核」挡住（读接口 200、`PUT` 一律 403，
-`stage` 队列里的记录随后被丢弃，页面只剩 npm 的占位包 `0.0.0-stage`）。所以改走 GitHub Packages：
+`stage` 队列里的记录随后被丢弃，页面只剩 npm 的占位包 `0.0.0-stage`）。
+**决定放弃公共 npm 渠道**（不再申诉、不再重试），发布只走 GitHub Packages：
 
 ```bash
 npm i -g @xiaobingan/hermes-purge --registry=https://npm.pkg.github.com
