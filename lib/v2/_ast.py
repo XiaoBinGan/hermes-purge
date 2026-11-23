@@ -102,6 +102,19 @@ def cmd_set_assign(path, name, value):
     return {"ok": True, "changed": True, "line": node.lineno, "name": name}
 
 
+def cmd_locate_batch(path, symbols):
+    """一次解析、批量回答：probe 阶段大量 locate 同一文件的多个符号，逐个起进程太慢。"""
+    text = load(path)
+    tree = ast.parse(text, filename=path)
+    out = {}
+    for symbol in symbols:
+        fn = find_func(tree, symbol)
+        out[symbol] = ({"ok": True, "symbol": symbol, "line": fn.lineno,
+                        "col": fn.col_offset, "end_line": fn.end_lineno}
+                       if fn is not None else {"ok": False, "reason": "symbol-not-found"})
+    return {"ok": True, "symbols": out}
+
+
 def cmd_locate(path, symbol):
     text = load(path)
     tree = ast.parse(text, filename=path)
@@ -121,6 +134,8 @@ def main(argv):
             return cmd_force_return(path, argv[3], " ".join(argv[4:]))
         if cmd == "set-assign":
             return cmd_set_assign(path, argv[3], " ".join(argv[4:]))
+        if cmd == "locate-batch":
+            return cmd_locate_batch(path, argv[3:])
         if cmd == "locate":
             return cmd_locate(path, argv[3])
         return {"ok": False, "reason": "unknown-cmd", "cmd": cmd}

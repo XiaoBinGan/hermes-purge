@@ -293,7 +293,8 @@ purge setup
 
 公共 npm 源（registry.npmjs.org）**不发布** —— 首次发布被平台侧发布权限审核挡住，已放弃该渠道。
 
-**动手之前先 `purge status`**。它只读、不写盘，先把这棵树的漂移基线记下来：
+**动手之前先 `purge status`**。它只读不写盘；本机 4937 个 `.py` 的宿主上 `purge status` ≈ **0.4 秒**（符号索引 + 批量 AST 定位，
+基线是 2.4 秒），先把这棵树的漂移基线记下来：
 
 ```bash
 node bin/purge.js status --target="$HOME/.hermes/hermes-agent"

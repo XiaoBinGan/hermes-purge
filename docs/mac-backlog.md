@@ -20,5 +20,10 @@
       PyPI 上 `hermes-agent` 最高也只到 0.19.0 —— **0.21.3 拿不到 pristine 样本**。
       改用可得的 `abandoned-rc.10-v0.21.5` 做真实样本：`31/31 applied`、L1 14 项通过、
       `revert` 代码逐字节还原；L2 因沙箱缺 `ruamel.yaml` 未跑（环境限制）
-- [ ] **大仓性能**：`purge status` 在 6000+ 行文件上的耗时（现在没量过）
+- [x] **大仓性能**（第 7 轮）：`purge status` 2.4s → **0.4s**。
+      两处热点：① `findSymbol` 每个符号都把全树 .py 读一遍（≈160ms/次 × 20 次）
+      → 建一次「补丁会碰到的目录」符号索引（24MB vs 全树 95MB），未命中再退回全树；
+      ② `probeAst` 每个符号起一个 python 进程 → `_ast.py locate-batch` 一次解析回答一批，
+      按「文件+mtime+size」缓存。踩到的坑：缓存只记「上次问过的符号」，同文件第二个符号
+      被误判 symbol-not-found，C10 从 applied 退化成 drifted → 改成缺什么补问什么
 - [ ] **文档**：`docs/troubleshooting.md` 补 3.1.x 遇到的新故障（sentinel / config 叠注释）
