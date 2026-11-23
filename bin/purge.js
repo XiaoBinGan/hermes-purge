@@ -60,6 +60,7 @@ function usageText() {
     '  purge report [--open] [--out=F]  生成单文件 HTML 状态报告（离线可开，能发给别人）',
     '  purge plugin [install|uninstall|status]  装一个 Hermes 插件：/purge 命令 + purge_status 工具',
     '  purge desktop [install|sync|uninstall|status]  在桌面端侧边栏加一个「hermes-purge 状态」入口',
+    '  purge parity [--out=F] [--diff=F]  导出/对比两台机器的「效果指纹」（mac ↔ win 对账用）',
     '  purge serve [--port=9123]    起本地控制服务，让面板上的「启用/停用/体检/刷新」按钮可用',
     '  purge stats [--json] [--since=ISO]  观测：轮次、拒答收敛、cap 命中、成本',
     '',
@@ -178,6 +179,70 @@ function collectRows() {
     const r = probeChain(cap);
     return { id: cap.id, cap: cap.cap, layer: cap.layer, impl: r.kind, status: r.status, detail: r.detail, tried: r.tried };
   });
+}
+
+/* ───────────── 跨机等效性对账（mac / win 两边"效果一样"靠它）───────────── */
+
+function paritySnapshot() {
+  const rows = collectRows();
+  // 只留「效果」：谁生效了、走的哪层。不带路径、python、耗时 —— 两台机器必然不同
+  return {
+    schema: 1,
+    version: pkgVersion(),
+    adapter: ADAPTER.id,
+    caps: rows.map((r) => ({ id: r.id, cap: r.cap, status: r.status, impl: r.impl })),
+    summary: {
+      total: rows.length,
+      applied: rows.filter((r) => r.status === 'applied').length,
+      pending: rows.filter((r) => r.status === 'pending').length,
+      drifted: rows.filter((r) => r.status === 'drifted').length,
+    },
+  };
+}
+
+function cmdParity() {
+  const snap = paritySnapshot();
+  const out = args.out && args.out !== true ? path.resolve(String(args.out)) : null;
+
+  if (args.diff && args.diff !== true) {
+    const other = JSON.parse(fs.readFileSync(path.resolve(String(args.diff)), 'utf8'));
+    const mine = new Map(snap.caps.map((c) => [c.id, c]));
+    const theirs = new Map((other.caps || []).map((c) => [c.id, c]));
+    const ids = [...new Set([...mine.keys(), ...theirs.keys()])].sort();
+    const diffs = [];
+    for (const id of ids) {
+      const a = theirs.get(id);   // 对端（通常是 Windows）
+      const b = mine.get(id);     // 本机
+      if (!a) { diffs.push({ id, kind: 'missing-remote' }); continue; }
+      if (!b) { diffs.push({ id, kind: 'missing-local' }); continue; }
+      if (a.status !== b.status) diffs.push({ id, kind: 'status', remote: a.status, local: b.status });
+      else if ((a.impl || '') !== (b.impl || '')) diffs.push({ id, kind: 'impl', remote: a.impl, local: b.impl });
+    }
+    if (!diffs.length) {
+      console.log('两边效果一致：' + snap.caps.length + ' 条 cap 的 status 与实现层完全相同');
+      console.log(paint('（对端 ' + (other.version || '?') + ' / ' + (other.adapter || '?') + '，本机 ' + snap.version + ' / ' + snap.adapter + '）', C.dim));
+      return;
+    }
+    console.log(paint('发现 ' + diffs.length + ' 处差异', C.y));
+    for (const d of diffs) {
+      if (d.kind === 'status') console.log('  ' + String(d.id).padEnd(5) + ' 对端 ' + String(d.remote).padEnd(9) + '→ 本机 ' + d.local);
+      else if (d.kind === 'impl') console.log('  ' + String(d.id).padEnd(5) + ' 实现层 对端 ' + String(d.remote).padEnd(8) + '→ 本机 ' + d.local);
+      else console.log('  ' + String(d.id).padEnd(5) + ' ' + (d.kind === 'missing-remote' ? '对端没有这条' : '本机没有这条'));
+    }
+    process.exitCode = 1;
+    return;
+  }
+
+  const text = JSON.stringify(snap, null, 2);
+  if (out) {
+    fs.mkdirSync(path.dirname(out), { recursive: true });
+    fs.writeFileSync(out, text + '\n', 'utf8');
+    console.log('效果指纹 → ' + out);
+    console.log('  ' + snap.summary.applied + '/' + snap.summary.total + ' 生效 · 版本 ' + snap.version + ' · adapter ' + snap.adapter);
+    console.log(paint('  拿到另一台机器上跑：purge parity --diff=' + path.basename(out), C.dim));
+    return;
+  }
+  console.log(text);
 }
 
 function cmdStatus() {
@@ -807,6 +872,7 @@ switch (cmd) {
   case 'revert': cmdRevert(); break;
   case 'doctor': cmdDoctor(); break;
   case 'report': cmdReport(); break;
+  case 'parity': cmdParity(); break;
   case 'plugin': cmdPlugin(); break;
   case 'desktop': cmdDesktop(); break;
   case 'serve': cmdServe(); break;
