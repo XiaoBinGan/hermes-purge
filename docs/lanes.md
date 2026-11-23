@@ -10,8 +10,15 @@
 | `lane/win` | Windows 那条线 | 只在这里提交 win 侧改动 |
 | `main` | 集成 | 只在两侧都通过各自验收后，由集成方 fast-forward 或 merge 进来 |
 
+**`main` 已经在 GitHub 上开了分支保护**（2026-11-24 起生效，管理员同样受限）：
+
+- 必须走 Pull Request，直推会被服务端拒绝：`GH006: Changes must be made through a pull request`
+- 禁止 force push、禁止删除分支
+
+所以「不要直接提交到 main」不再靠自觉，是硬约束。合并只发生在 PR 里。
+
 规则：
-1. **不要在 `main` 上直接提交**（集成除外）。
+1. **不要在 `main` 上直接提交** —— 服务端会拒绝；一律 `lane/*` → PR → merge。
 2. 不要跨泳道推分支，不要 `--force` 推 `main`。
 3. 合并顺序不重要，但每次合并前必须：`npm test` 全绿 + 各自实机 `verify --level=2` 通过。
 

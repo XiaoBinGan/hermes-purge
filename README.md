@@ -89,7 +89,8 @@ purge uninstall --yes         # 撤补丁 + 删 shim + 删状态目录
 ---
 
 > **两条泳道并行**：macOS 与 Windows 各自维护自己的锚点文件与分支，互不覆盖。
-> 规则见 [`docs/lanes.md`](docs/lanes.md)（分支 `lane/mac` / `lane/win`，`main` 只做集成）。
+> `main` 已开分支保护（必须走 PR，直推会被拒绝）；规则见 [`docs/lanes.md`](docs/lanes.md)
+> （分支 `lane/mac` / `lane/win`，`main` 只做集成）。
 
 ## 它到底改了什么（30 秒版）
 
