@@ -1,5 +1,25 @@
 # Changelog
 
+## 3.1.5 —— `purge parity`：两台机器「效果一样」有据可查
+
+分工定下来后（mac 我管、win 他们管），需要一条能证明「两边效果一致」的东西，
+而不是口头说「都装好了」。
+
+新增 `purge parity`：
+
+```bash
+purge parity --out=win.json      # Windows 上导出
+purge parity --diff=win.json     # mac 上比对
+# 一致 → 退出码 0：两边效果一致：31 条 cap 的 status 与实现层完全相同
+# 不一致 → 退出码 1：逐条点名，如 `C13 对端 drifted → 本机 applied`
+```
+
+指纹只含 `{id, cap, status, impl}` 与汇总，**不含路径 / python / 耗时** ——
+两台不同系统的机器可以直接比。跨版本也能比（版本号只作提示）。
+
+`test/parity.js` 4 项：指纹稳定且不含本机路径、自比对一致、退化指纹报差异并非 0 退出、
+能识别对端缺少某条 cap。
+
 ## 3.1.4 —— 双端并行：锚点按泳道拆文件，结构上不可能冲突
 
 macOS 与 Windows 现在各管一台机器，要求「绝对不能冲突」。光靠约定不够，所以把**唯一会共同编辑的文件拆开了**：

@@ -4,7 +4,7 @@
 让模型被拒时自动重采样。31 条能力、四层落地（AST / 运行时 shim / 文本 / 配置）、
 改坏了能逐字节回滚。
 
-**一条命令安装，一条命令撤销。** 当前版本 **3.1.4** · 零依赖 · Node ≥18 · macOS + Windows 实测。
+**一条命令安装，一条命令撤销。** 当前版本 **3.1.5** · 零依赖 · Node ≥18 · macOS + Windows 实测。
 
 > 借鉴了 [dsh-purge](https://github.com/YuJunZhiXue/dsh-purge) 的一个判断（「不跟模型讲道理，直接改宿主」），
 > 但引擎、补丁清单、验证方式、CLI 都是为 Hermes 独立写的 —— 没有一行共享代码。逐条对账见下文「我们比它强在哪」。
@@ -75,6 +75,15 @@ purge revert                  # 只撤补丁，命令留着
 purge uninstall --yes         # 撤补丁 + 删 shim + 删状态目录
 ./install.sh --uninstall      # 再把 purge/hp 两个命令删掉
 ```
+
+### 两台机器效果对账（mac ↔ Windows）
+
+```bash
+purge parity --out=mac.json      # 导出一份「效果指纹」：每条 cap 的 status + 实现层
+purge parity --diff=mac.json     # 在另一台机器上比对，一致返回 0，不一致点名具体 cap 并返回 1
+```
+
+指纹里不含路径、python、耗时，所以两台机器可以直接比。
 
 ### 装不上？先看这三条
 
