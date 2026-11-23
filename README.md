@@ -26,12 +26,18 @@ cd hermes-purge
 ### 2. 一条命令装好并应用
 
 ```bash
-./install.sh --setup --yes            # macOS / Linux
+npm i -g hermes-purge && purge setup --yes      # 任意平台，最简单
+```
+
+```bash
+./install.sh --setup --yes                      # 或用仓库里的脚本（macOS / Linux）
 ```
 
 ```powershell
-.\install.ps1 -Setup -Yes             # Windows（PowerShell）
+.\install.ps1 -Setup -Yes                       # Windows（PowerShell）
 ```
+
+三个方式做的事一样：把 `purge` / `hp` 装进 PATH → 检测宿主 → 打印计划 → 应用并验证。
 
 它会做四件事：把命令装进 PATH（`purge` / `hp`）→ 检测宿主 → 打印计划 → 应用并验证。
 想先看计划不写入：`./install.sh` 然后 `purge setup --dry`。
@@ -248,6 +254,7 @@ purge setup
 | 把 `bin` 加进 PATH | 不想装包，只想少打几个字 | 见「方式三」 |
 
 **前置**：Node **≥ 18**（`node -v` 确认；用到内置 `fetch` / `WebSocket`）。零依赖，不需要 `npm install`。
+npm 上已发布：`npm i -g hermes-purge`（[npmjs.com/package/hermes-purge](https://www.npmjs.com/package/hermes-purge)）。
 
 **动手之前先 `purge status`**。它只读、不写盘，先把这棵树的漂移基线记下来：
 
