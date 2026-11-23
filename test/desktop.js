@@ -89,6 +89,12 @@ t('没有备份但 index.html 被改过时，uninstall 也能摘干净', () => {
   assert.ok(html.includes('</body>'), 'html 结构被破坏');
 });
 
+t('注入脚本不读布局（getBoundingClientRect 会把 Electron renderer 卡死）', () => {
+  const src = desktop.panelSource('<html></html>', { version: 'x' });
+  const hits = src.split('\n').filter((l) => l.includes('getBoundingClientRect') && !l.trim().startsWith('//'));
+  assert.strictEqual(hits.length, 0, '代码里还有布局读取：' + hits.slice(0, 2).join(' / '));
+});
+
 t('status 能报出安装状态与备份', () => {
   assert.deepStrictEqual(desktop.status(a.dir), { distDir: a.dir, installed: false, hasBackup: false });
   desktop.install(a.dir, { report: 'x' });

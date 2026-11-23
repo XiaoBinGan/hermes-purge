@@ -1,5 +1,24 @@
 # Changelog
 
+## 3.0.5 —— 修桌面端崩溃：注入脚本不再读布局
+
+现象：重启桌面端后侧边栏入口不出现，`~/.hermes/logs/desktop.log` 里是
+
+```
+[renderer] webContents became unresponsive   ×4
+[renderer] render-process-gone reason=crashed exitCode=5
+```
+
+根因：注入脚本在 `MutationObserver` 回调里调用 `getBoundingClientRect()` 找侧边栏。
+聊天流式输出时 DOM 每秒变几百次，每次回调都强制同步布局 → renderer 卡死 → Electron 判崩溃。
+
+修法：
+- 找侧边栏**完全不读布局**：直接按结构选 `ul.gap-px`（源码里就是 `<SidebarMenu className="gap-px">`），
+  退路是 `aside ul / nav ul / [data-sidebar] ul` 里第一个满足「≥3 个 li>button」的
+- 观察器节流到 1.5s 一次、只看节点在不在，注入成功后**停掉轮询**
+- 回归测试加一条：生成的注入脚本里不允许出现 `getBoundingClientRect`
+- Chromium 压测：3 秒内约 3000 次 DOM 变更，入口照常注入、无卡死
+
 ## 3.0.4 —— Windows 真机无跳过全绿 + 引擎验证
 
 在 Win11 ARM 上补装 Python 3.12.8（embeddable），把之前「按设计跳过」的用例全跑起来：
