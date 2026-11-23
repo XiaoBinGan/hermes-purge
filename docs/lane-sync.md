@@ -13,7 +13,26 @@
 | 0.21.4 沙箱 | `31/31` · L1 14 / L2 14 · revert 逐字节还原 |
 | Windows 实机（0.21.x） | 28/31（C13/C14/C16 缺锚点）—— 由 win 泳道补齐 |
 
-## 本轮变更（第 7 轮 · 性能）
+## 本轮变更（第 8 轮 · 排查手册）
+
+`docs/troubleshooting.md` 从 6 节扩到 7 节（445 → 560 行），新增的都是 3.1.x 在真机上踩到并修掉的：
+
+| 节 | 故障 | 判据 |
+|---|---|---|
+| 7.1 | `apply` 成功但 `status` 报 drifted（sentinel 不匹配） | `apply` 输出 vs `status --json` 里 drifted 的 id |
+| 7.2 | `approvals.mode` 改不动 / 注释越叠越多 / 根上没有 `model:` 段 | `grep -A3 '^approvals:' config.yaml` |
+| 7.3 | `.env` 里值错却报已生效 | `grep -E '^HERMES_(YOLO\|APPROVAL)_MODE=' .env` |
+| 7.4 | macOS `agent install` 后服务不起、日志空白 | `purge agent status` + `launchctl print` + `sample` 栈 |
+| 7.5 | `status` 慢 | `time purge status` + `find -name '*.py' \| wc -l` |
+
+每条都写「怎么确认 → 怎么修 → 对应回归测试（`test/sentinel.js` / `test/conf-yaml.js` /
+`test/ast-batch.js`）」，速查表补 6 行。
+
+验证：全量 41+30+33+12+16+10+7+12+4+9+2+4+4+3+5+DOM 全绿；本机 31/31。
+
+**backlog 到此清空** —— 后续轮次转为健康检查（status 31/31 + npm test），有新的再往 backlog 里加。
+
+### 上一轮（第 7 轮 · 性能）
 
 `purge status` 在本机（4937 个 .py）从 **2.4s → 0.4s**；0.21.4 / 0.21.5 沙箱同样 0.33s，结果都还是 31/31。
 

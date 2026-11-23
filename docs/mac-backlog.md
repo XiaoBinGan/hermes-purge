@@ -26,4 +26,6 @@
       ② `probeAst` 每个符号起一个 python 进程 → `_ast.py locate-batch` 一次解析回答一批，
       按「文件+mtime+size」缓存。踩到的坑：缓存只记「上次问过的符号」，同文件第二个符号
       被误判 symbol-not-found，C10 从 applied 退化成 drifted → 改成缺什么补问什么
-- [ ] **文档**：`docs/troubleshooting.md` 补 3.1.x 遇到的新故障（sentinel / config 叠注释）
+- [x] **文档**（第 8 轮）：`docs/troubleshooting.md` 增补第 7 节 —— 3.1.x 在真机上踩到并修掉的
+      五类故障（sentinel 不匹配 / config 叠注释·mode 不改 / .env 值不改 / launchd TCC /
+      status 慢），每条给「判据命令 + 修法 + 对应回归测试」；速查表补 6 行
