@@ -13,7 +13,27 @@
 | 0.21.4 沙箱 | `31/31` · L1 14 / L2 14 · revert 逐字节还原 |
 | Windows 实机（0.21.x） | 28/31（C13/C14/C16 缺锚点）—— 由 win 泳道补齐 |
 
-## 本轮变更（第 4 轮 · 面板快照自动刷新）
+## 本轮变更（第 5 轮 · parity 按层汇总）
+
+`purge parity` 的指纹升到 **schema 2**：每条形如 `{id, cap, layer, status, impl}`，另加 `layers` 汇总。
+
+`--diff` 现在先给粗结论再给细节：
+
+```
+按层对比
+  ✖ code    本机 25/25 · 对端 22/25  缺/异: C13 C14 C16
+  ✔ config  本机 4/4 · 对端 4/4
+  ✔ prompt  本机 2/2 · 对端 2/2
+发现 3 处差异
+  C13   对端 drifted  → 本机 applied
+```
+
+老指纹（schema=1，没有 `layer`/`layers`）**仍能比对**，不会因为对端没升级就报错。
+`test/parity-layers.js` 3 项；`test/parity.js` 同步到 schema 2。
+
+验证：全量 41+30+33+12+16+10+7+12+4+9+2+4+4+3+DOM 全绿；本机 31/31。
+
+### 上一轮（第 4 轮 · 面板快照自动刷新）
 
 以前 apply/revert 之后面板还显示旧结论，得手动 `purge desktop sync`。现在：
 

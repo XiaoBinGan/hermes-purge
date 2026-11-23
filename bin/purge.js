@@ -187,11 +187,19 @@ function collectRows() {
 function paritySnapshot() {
   const rows = collectRows();
   // 只留「效果」：谁生效了、走的哪层。不带路径、python、耗时 —— 两台机器必然不同
+  const layers = {};
+  for (const r of rows) {
+    const l = r.layer || 'unknown';
+    layers[l] = layers[l] || { total: 0, applied: 0 };
+    layers[l].total++;
+    if (r.status === 'applied') layers[l].applied++;
+  }
   return {
-    schema: 1,
+    schema: 2,
     version: pkgVersion(),
     adapter: ADAPTER.id,
-    caps: rows.map((r) => ({ id: r.id, cap: r.cap, status: r.status, impl: r.impl })),
+    caps: rows.map((r) => ({ id: r.id, cap: r.cap, layer: r.layer, status: r.status, impl: r.impl })),
+    layers,
     summary: {
       total: rows.length,
       applied: rows.filter((r) => r.status === 'applied').length,
@@ -223,6 +231,30 @@ function cmdParity() {
       console.log('两边效果一致：' + snap.caps.length + ' 条 cap 的 status 与实现层完全相同');
       console.log(paint('（对端 ' + (other.version || '?') + ' / ' + (other.adapter || '?') + '，本机 ' + snap.version + ' / ' + snap.adapter + '）', C.dim));
       return;
+    }
+    // 先给「哪一层对不上」的粗结论，再逐条列细节
+    const layerOf = (id) => {
+      const a = theirs.get(id) || mine.get(id) || {};
+      return a.layer || 'unknown';
+    };
+    const byLayer = {};
+    for (const d of diffs) {
+      const l = layerOf(d.id);
+      byLayer[l] = byLayer[l] || [];
+      byLayer[l].push(d.id);
+    }
+    const localLayers = snap.layers || {};
+    const remoteLayers = other.layers || {};
+    const layerNames = [...new Set([...Object.keys(localLayers), ...Object.keys(remoteLayers), ...Object.keys(byLayer)])].sort();
+    console.log(paint('按层对比', C.b));
+    for (const l of layerNames) {
+      const loc = localLayers[l] || { total: 0, applied: 0 };
+      const rem = remoteLayers[l] || { total: 0, applied: 0 };
+      const bad = byLayer[l] || [];
+      const flag = bad.length ? paint('✖', C.r) : paint('✔', C.g);
+      const tail = bad.length ? '  缺/异: ' + bad.join(' ') : '';
+      console.log('  ' + flag + ' ' + String(l).padEnd(7) + ' 本机 ' + loc.applied + '/' + loc.total +
+        ' · 对端 ' + rem.applied + '/' + rem.total + tail);
     }
     console.log(paint('发现 ' + diffs.length + ' 处差异', C.y));
     for (const d of diffs) {

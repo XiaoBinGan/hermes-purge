@@ -14,7 +14,8 @@
       → 补 `enable` + `kickstart -kp`，并做健康探测
 - [x] **面板自动刷新**（第 4 轮）：apply/revert 真的改了东西时自动重建面板快照（`--no-panel-sync` 可关，
       面板没装时静默跳过，刷新失败不影响主流程）
-- [ ] **`purge parity` 增加按层汇总**：不只逐条，给出「哪些层一致 / 哪层缺」
+- [x] **`purge parity` 按层汇总**（第 5 轮）：指纹加 `layers`（code/config/prompt 各自 applied/total），
+      `--diff` 先输出「哪层缺、缺哪几条」再逐条列；老的 schema=1 指纹仍能比
 - [ ] **0.21.3 真实样本验证**：找一棵 pristine 0.21.3 树跑 31/31（现在只有 0.21.0 / 0.21.4 实测）
 - [ ] **大仓性能**：`purge status` 在 6000+ 行文件上的耗时（现在没量过）
 - [ ] **文档**：`docs/troubleshooting.md` 补 3.1.x 遇到的新故障（sentinel / config 叠注释）
