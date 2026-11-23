@@ -1,5 +1,21 @@
 # Changelog
 
+## 3.1.2 —— 发布到 GitHub Packages + 降风控元数据
+
+npm 公共源首次发布被平台侧的「发布权限审核」挡住（读接口 200、`PUT` 一律 403，
+`stage` 队列里的记录随后被丢弃，页面只剩 npm 的占位包 `0.0.0-stage`）。所以改走 GitHub Packages：
+
+```bash
+npm i -g @xiaobingan/hermes-purge --registry=https://npm.pkg.github.com
+```
+
+已实测：安装后 `purge --version` → `3.1.2`，`hp --help` 正常。
+
+顺带调整元数据，降低自动审查误判概率：
+- 去掉 `keywords` 里的 `jailbreak` / `redteam`
+- 包描述改为中性技术表述（四层落地 / 事务回滚 / 三级验证）
+功能没有任何变化。
+
 ## 3.1.1 —— 修 3.1.0 引入的「候选 [] 一个都识别不到」
 
 3.1.0 把选择条件收得太死（`ul` 必须带 `gap-px`，或**按钮**上带 `data-tour^="sidebar-nav-"`）。

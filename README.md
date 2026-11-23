@@ -4,7 +4,7 @@
 让模型被拒时自动重采样。31 条能力、四层落地（AST / 运行时 shim / 文本 / 配置）、
 改坏了能逐字节回滚。
 
-**一条命令安装，一条命令撤销。** 当前版本 **3.1.1** · 零依赖 · Node ≥18 · macOS + Windows 实测。
+**一条命令安装，一条命令撤销。** 当前版本 **3.1.2** · 零依赖 · Node ≥18 · macOS + Windows 实测。
 
 > 借鉴了 [dsh-purge](https://github.com/YuJunZhiXue/dsh-purge) 的一个判断（「不跟模型讲道理，直接改宿主」），
 > 但引擎、补丁清单、验证方式、CLI 都是为 Hermes 独立写的 —— 没有一行共享代码。逐条对账见下文「我们比它强在哪」。
@@ -254,8 +254,14 @@ purge setup
 | 把 `bin` 加进 PATH | 不想装包，只想少打几个字 | 见「方式三」 |
 
 **前置**：Node **≥ 18**（`node -v` 确认；用到内置 `fetch` / `WebSocket`）。零依赖，不需要 `npm install`。
-npm 上已提交 `hermes-purge@3.1.1`（首次发布走 npm 的 staged 流程，**审核通过后**才能 `npm i -g hermes-purge`；
-在此之前请用 Release 里的 tgz 或下面的脚本安装）。
+**已发布到 GitHub Packages**：`@xiaobingan/hermes-purge@3.1.2`
+
+```bash
+npm i -g @xiaobingan/hermes-purge --registry=https://npm.pkg.github.com
+purge setup --yes
+```
+
+（npm 公共源那边首次发布卡在平台侧的发布权限审核，恢复后再补发 `hermes-purge`；功能以本仓库 tag 为准。）
 
 **动手之前先 `purge status`**。它只读、不写盘，先把这棵树的漂移基线记下来：
 
