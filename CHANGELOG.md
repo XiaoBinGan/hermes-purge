@@ -1,5 +1,27 @@
 # Changelog
 
+## 3.0.7 —— README 让人能装起来 + install.ps1 真支持 -Setup
+
+之前 README 一上来是 20 行法务声明 + 800 行工程细节，想装的人得自己翻；而且它写着
+`.\install.ps1 --setup --yes`，**脚本里根本没有这个开关**（PowerShell 也不认 `--` 前缀）。
+
+### 文档
+
+README 顶部重排：一句话定位 → **30 秒上手**（clone / 一条命令 / 怎么确认生效）→ 撤销 →
+装不上的三条排查 → 才有原理、兼容矩阵、实测数据。工程细节仍完整保留，只是挪到「不看也能用」的分隔线之后。
+
+### 修
+
+- `install.ps1` 新增 `-Setup` / `-Yes`（等价 POSIX 的 `--setup` / `--yes`）：装完命令后
+  直接把 `purge setup` 跑起来，与 macOS 一条命令对齐
+- `windows-smoke.ps1` 新增一步：真跑 `install.ps1 -Setup -Yes`，断言它确实调到了 `purge setup`
+  并打印了 cap 统计
+
+### 真机复验（Win11 ARM / Node 22.11.0 / Python 3.12.8）
+
+`SMOKE_EXIT=0`，七步全 OK：单元 41/30/33/12/16 · package 16/16 · install.ps1 安装 ·
+**install.ps1 -Setup -Yes** · setup --dry/非交互拒绝/uninstall · CRLF 保真。
+
 ## 3.0.6 —— 修面板按钮 401（token 没传到脚本）+ 脚本缓存穿透
 
 现象：控制台报 `127.0.0.1:9123/api/action 401 (Unauthorized)`，面板按钮点了没反应。
