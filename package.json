@@ -62,6 +62,8 @@
     "judge": "node bench/judge-eval.js",
     "test:plugin": "node test/plugin.js",
     "test:desktop": "node test/desktop.js",
+    "test:win": "powershell -NoProfile -ExecutionPolicy Bypass -File test/win/run-smoke.ps1",
+    "test:engine": "powershell -NoProfile -ExecutionPolicy Bypass -File test/win/run-engine.ps1",
     "test:control": "node test/control.js"
   },
   "engines": {

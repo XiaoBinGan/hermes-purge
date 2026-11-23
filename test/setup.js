@@ -167,6 +167,36 @@ t('install.ps1 存在且是 CRLF（Windows 上不乱行）', () => {
   assert.ok(raw.includes(0x0d) && raw.includes(0x0a), 'install.ps1 不是 CRLF');
 });
 
+t('install.ps1 是 UTF-8 BOM（Windows PowerShell 5.1 才按 UTF-8 解析中文）', () => {
+  const raw = fs.readFileSync(path.join(ROOT, 'install.ps1'));
+  assert.ok(raw[0] === 0xef && raw[1] === 0xbb && raw[2] === 0xbf, 'install.ps1 缺 UTF-8 BOM');
+});
+
+t('仓库里每个 .ps1 都带 UTF-8 BOM（否则 PS 5.1 拿 ANSI 解中文会炸）', () => {
+  const ps1 = [];
+  const walk = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (e.name === 'node_modules' || e.name === '.git') continue;
+      const f = path.join(dir, e.name);
+      if (e.isDirectory()) walk(f);
+      else if (e.name.endsWith('.ps1')) ps1.push(f);
+    }
+  };
+  walk(ROOT);
+  assert.ok(ps1.length >= 3, '没找到 .ps1 文件');
+  for (const f of ps1) {
+    const b = fs.readFileSync(f);
+    assert.ok(b[0] === 0xef && b[1] === 0xbb && b[2] === 0xbf, path.relative(ROOT, f) + ' 缺 UTF-8 BOM');
+  }
+});
+
+t('install.ps1 生成的 .cmd 不含绝对路径（中文安装目录不会被写成 ?）', () => {
+  const s = fs.readFileSync(path.join(ROOT, 'install.ps1'), 'utf8');
+  assert.ok(s.includes('%~dp0_hermes-purge-launch.js'), '.cmd 没有走 %~dp0 启动器');
+  assert.ok(s.includes('_hermes-purge-home.json'), '没有写路径配置 JSON');
+  assert.ok(!/node .{0,4}\$Dest\bin/.test(s), '.cmd 里还在拼 $Dest 绝对路径');
+});
+
 fs.rmSync(TMP, { recursive: true, force: true });
 console.log('\n' + (fail === 0 ? `全部通过 ${pass}/${pass}` : `${pass} 通过 · ${fail} 失败`));
 process.exit(fail === 0 ? 0 : 1);

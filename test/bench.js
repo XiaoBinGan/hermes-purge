@@ -134,7 +134,7 @@ t('解析：python 走 py_compile，写坏的文件要被点名', () => {
   const fs2 = require('fs'), os2 = require('os');
   const dir = fs2.mkdtempSync(path.join(os2.tmpdir(), 'art2-'));
   const platform = require('../lib/v2/platform');
-  const py = platform.findPython('.') || platform.which('python') || platform.which('python3');
+  const py = platform.pickPython('.');
   if (!py) { console.log('    （本机没有 python，跳过）'); return; }
   try {
     fs2.writeFileSync(path.join(dir, 'ok.py'), 'x = 1\n');

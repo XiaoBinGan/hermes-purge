@@ -1,11 +1,13 @@
-﻿$ErrorActionPreference = 'Continue'
-$root = 'C:\purge-test'
-Set-Location $root
-Expand-Archive "$root\repo.zip" -DestinationPath $root -Force
-Expand-Archive "$root\node.zip" -Destination "$root\node" -Force
-$env:PATH = "$root\node\node-v22.11.0-win-arm64;$root\py;$env:PATH"
+﻿# 在任意 Windows 上跑完整验收：.	estwinun-smoke.ps1
+# （以前这脚本写死了 C:\purge-test + repo.zip，只有那台 VM 能跑）
+$ErrorActionPreference = 'Stop'
+try { [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch { }
+
+$repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+Set-Location $repo
 Write-Output ("NODE=" + (& node -v))
 Write-Output ("NPM=" + (& npm -v))
-Set-Location "$root\hermes-purge"
-& powershell -NoProfile -ExecutionPolicy Bypass -File .\windows-smoke.ps1
-Write-Output ("SMOKE_EXIT=" + $LASTEXITCODE)
+& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $repo 'windows-smoke.ps1')
+$code = $LASTEXITCODE
+Write-Output ("SMOKE_EXIT=" + $code)
+exit $code

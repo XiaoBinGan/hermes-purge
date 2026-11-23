@@ -29,7 +29,7 @@ function Warn($m) { Write-Host $m -ForegroundColor Yellow }
 function Die($m)  { Write-Host $m -ForegroundColor Red; exit 1 }
 
 if ($Uninstall) {
-  foreach ($c in 'purge.cmd','hp.cmd') {
+  foreach ($c in 'purge.cmd','hp.cmd','_hermes-purge-launch.js','_hermes-purge-home.json') {
     $p = Join-Path $Bin $c
     if (Test-Path $p) { Remove-Item $p -Force; Say "已移除 $p" }
   }
@@ -73,13 +73,54 @@ if (Test-Path (Join-Path $Src 'bin\purge.js')) {
   New-Item -ItemType Directory -Path $Dest -Force | Out-Null
   Copy-Item (Join-Path $srcDir.FullName '*') $Dest -Recurse -Force
   Remove-Item $tmpZip, $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
-  Say "已安装到 $Dest（版本 $Version，无需登录）"
+  # package.json 是 UTF-8：PS 5.1 的 Get-Content 默认按 ANSI 读会乱码，必须显式 UTF-8
+  $installed = $Version
+  try { $installed = ([IO.File]::ReadAllText((Join-Path $Dest 'package.json'), [Text.Encoding]::UTF8) | ConvertFrom-Json).version } catch { }
+  Say "已安装到 $Dest（版本 $installed，无需登录）"
 }
 
 New-Item -ItemType Directory -Path $Bin -Force | Out-Null
+
+# ── 启动器：.cmd 里绝不出现真实路径 ────────────────────────────────────────
+# 坑：路径带中文/日文/俄文时，Set-Content -Encoding ASCII 会把它们写成 "?"，
+# 而 cmd.exe 又按 OEM 代码页（中文 Windows 是 936）解析批处理，UTF-8 也救不回来。
+# 结果就是 node 收到 "G:\??????????\...\purge.js" → MODULE_NOT_FOUND。
+# 解法：.cmd 只有纯 ASCII 的相对调用（%~dp0 在运行时展开，走的是 UTF-16），
+# 真实路径写进 UTF-8 的 JSON，由 Node 启动器读（Node 收命令行参数永远是 Unicode）。
+$homeJson = Join-Path $Bin '_hermes-purge-home.json'
+$launcher = Join-Path $Bin '_hermes-purge-launch.js'
+$launcherJs = @'
+'use strict';
+// install.ps1 生成的启动器（纯 ASCII 源码）。
+// 真实安装路径在同目录 _hermes-purge-home.json —— 这样 .cmd 不用写非 ASCII 路径。
+const fs = require('fs');
+const path = require('path');
+const { spawnSync } = require('child_process');
+const cfg = path.join(__dirname, '_hermes-purge-home.json');
+let home;
+try {
+  home = JSON.parse(fs.readFileSync(cfg, 'utf8')).home;
+} catch (e) {
+  console.error('[hermes-purge] 读不到安装位置：' + cfg + '（重跑 install.ps1）');
+  process.exit(1);
+}
+const cmd = process.argv[2];
+const entry = path.join(home, 'bin', cmd + '.js');
+const r = spawnSync(process.execPath, [entry].concat(process.argv.slice(3)), { stdio: 'inherit' });
+if (r.error) {
+  console.error('[hermes-purge] 启动失败：' + (r.error.message || r.error));
+  process.exit(1);
+}
+process.exit(typeof r.status === 'number' ? r.status : 1);
+'@
+[IO.File]::WriteAllText($launcher, $launcherJs, (New-Object Text.UTF8Encoding($false)))
+# JSON 里用正斜杠：Windows 路径不含双引号，这样不用处理反斜杠转义
+$homeJsonText = '{"home": "' + $Dest.Replace('\', '/') + '"}'
+[IO.File]::WriteAllText($homeJson, $homeJsonText, (New-Object Text.UTF8Encoding($false)))
+
 foreach ($c in 'purge','hp') {
   $cmdPath = Join-Path $Bin ($c + '.cmd')
-  $body = "@echo off`r`nnode `"$Dest\bin\$c.js`" %*`r`n"
+  $body = "@echo off`r`nnode `"%~dp0_hermes-purge-launch.js`" $c %*`r`n"
   Set-Content -Path $cmdPath -Value $body -Encoding ASCII -NoNewline
   Say "已安装命令：$cmdPath"
 }

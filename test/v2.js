@@ -30,8 +30,10 @@ function t(name, fn) {
 }
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'purge-v2-'));
-// 宿主 python 优先：PY 显式指定 > which python3 > which python
-const py = process.env.PY || platform.which('python3') || platform.which('python');
+// 宿主 python 优先：PY 显式指定 > 项目 venv > PATH 上真能跑 python 3 的那个。
+// 不能直接 which('python3')：Windows 上它常是 pyenv-win 的 python3.bat 代理，
+// Node ≥20 的 spawnSync 跑 .bat 会 EINVAL（Mac/Linux 没这个问题）。
+const py = platform.pickPython(path.join(__dirname, '..'));
 
 /* ───────────── 文本：CRLF / BOM ───────────── */
 
@@ -158,7 +160,8 @@ t('模板是合法 python（true/false 已转 True/False）', () => {
   if (py) {
     const f = path.join(tmp, 'shim_check.py');
     fs.writeFileSync(f, src);
-    const r = spawnSync(py, ['-c', `import ast,sys; ast.parse(open(sys.argv[1], encoding="utf-8").read())`, f]);
+    const r = platform.spawnAny(py, ['-c', `import ast,sys; ast.parse(open(sys.argv[1], encoding="utf-8").read())`, f],
+      { env: platform.pyEnv() });
     assert.strictEqual(r.status, 0, String(r.stderr));
   }
 });
@@ -226,6 +229,55 @@ t('二次 apply 不会丢掉第一份快照', () => {
 /* ───────────── 文本实现 ───────────── */
 
 console.log('\n文本实现');
+
+t('replace 已应用但没带 cap id 的老补丁 → applied（不能误报 drifted）', () => {
+  const root = path.join(tmp, 'legacy');
+  fs.mkdirSync(root, { recursive: true });
+  const oldTo = '# [hermes-purge] 老版本注入\nX = 2';
+  fs.writeFileSync(path.join(root, 'a.py'), oldTo + '\n');
+  const sp = { file: 'a.py', kind: 'replace', find: 'X = 1', to: oldTo };
+  const ctx = { target: root };
+  assert.strictEqual(impls.probeText(sp, 'C13', ctx).status, 'applied');
+  fs.writeFileSync(path.join(root, 'a.py'), 'X = 1\n');
+  assert.strictEqual(impls.probeText(sp, 'C13', ctx).status, 'pending');
+  fs.writeFileSync(path.join(root, 'a.py'), 'Y = 0\n');
+  assert.strictEqual(impls.probeText(sp, 'C13', ctx).status, 'drifted');
+});
+
+t('yamlApprovals：只有 timeout 没有 mode 时也要补上 mode（否则永远 pending）', () => {
+  const root = path.join(tmp, 'cfg1');
+  fs.mkdirSync(root, { recursive: true });
+  fs.writeFileSync(path.join(root, 'config.yaml'), 'model:\n  default: x\napprovals:\n  timeout: 86400\n');
+  const sp = { file: 'config.yaml', kind: 'yamlApprovals' };
+  const ctx = { target: root };
+  assert.strictEqual(impls.probeText(sp, 'G01', ctx).status, 'pending');
+  assert.ok(impls.applyText(sp, 'G01', ctx).changed);
+  assert.strictEqual(impls.probeText(sp, 'G01', ctx).status, 'applied');
+  const y = fs.readFileSync(path.join(root, 'config.yaml'), 'utf8');
+  assert.ok(/approvals:\n  mode: 'off'/.test(y), y);
+  assert.ok(/timeout: 86400/.test(y), y);
+
+  // 宿主回写成 mode: smart 的也要改回 off，且不能把 MARK 叠两遍
+  const root2 = path.join(tmp, 'cfg2');
+  fs.mkdirSync(root2, { recursive: true });
+  fs.writeFileSync(path.join(root2, 'config.yaml'),
+    "approvals:\n  timeout: 86400  # [hermes-purge]  # [hermes-purge]\n  mode: smart\n");
+  const ctx2 = { target: root2 };
+  assert.strictEqual(impls.probeText(sp, 'G01', ctx2).status, 'pending');
+  impls.applyText(sp, 'G01', ctx2);
+  assert.strictEqual(impls.probeText(sp, 'G01', ctx2).status, 'applied');
+  const y2 = fs.readFileSync(path.join(root2, 'config.yaml'), 'utf8');
+  assert.ok(/mode: 'off'/.test(y2), y2);
+  assert.strictEqual((y2.match(/\[hermes-purge\]/g) || []).length, 1, y2);
+});
+
+t('win 泳道的变体能加载进 cap（hermes-win.js 被 patches.js 装载）', () => {
+  const { PATCHES } = require('../lib/patches');
+  const c20b = PATCHES.find((p) => p.id === 'C20b');
+  assert.ok(c20b && Array.isArray(c20b.variants) && c20b.variants.length >= 1, 'C20b 没有 win 变体');
+  assert.ok(c20b.variants.some((v) => v.label === 'win-lane' && /chat_completions\.py$/.test(v.file)),
+    JSON.stringify(c20b.variants));
+});
 
 t('splice 幂等（sentinel 判定）', () => {
   const root = path.join(tmp, 'txt');
@@ -339,8 +391,8 @@ if (py) {
   const logFile = path.join(v2dir, 'shim.log');
   const metricsFile = path.join(v2dir, 'metrics.jsonl');
   fs.writeFileSync(path.join(sp, shim.SHIM_NAME), shim.render([], logFile, metricsFile));
-  const r = spawnSync(py, ['-S', '-c', TURN_DRIVER, sp, path.join(sp, shim.SHIM_NAME)],
-    { encoding: 'utf8', cwd: root, timeout: 120000, windowsHide: true });
+  const r = platform.spawnAny(py, ['-S', '-c', TURN_DRIVER, sp, path.join(sp, shim.SHIM_NAME)],
+    { encoding: 'utf8', cwd: root, timeout: 120000, env: platform.pyEnv() });
   turnRun = { root, r, rows: metrics.read(root) };
 }
 
@@ -472,8 +524,8 @@ t('shim 模板含 turn 钩子且仍是合法 python（Windows 路径也过）', 
   if (!py) return;
   const f = path.join(tmp, 'shim_p4.py');
   fs.writeFileSync(f, src, 'utf8');
-  const r = spawnSync(py, ['-S', '-c', 'import ast,sys;ast.parse(open(sys.argv[1],encoding="utf-8").read())', f],
-    { encoding: 'utf8', timeout: 60000, windowsHide: true });
+  const r = platform.spawnAny(py, ['-S', '-c', 'import ast,sys;ast.parse(open(sys.argv[1],encoding="utf-8").read())', f],
+    { encoding: 'utf8', timeout: 60000, env: platform.pyEnv() });
   assert.strictEqual(r.status, 0, String(r.stderr));
 });
 

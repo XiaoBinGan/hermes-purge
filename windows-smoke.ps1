@@ -52,10 +52,24 @@ try {
     if (-not (Test-Path $cmd)) { throw '没生成 purge.cmd' }
     $v = (& $cmd --version).Trim()
     # 别用 node -p "require(...)"：PS5.1 吃掉双引号会炸；直接读 package.json
-    $want = (Get-Content 'package.json' -Raw | ConvertFrom-Json).version.Trim()
+    # PS 5.1 的 Get-Content 默认按 ANSI 解码：package.json 是 UTF-8 且带中文，直接读会乱码
+    $want = ([IO.File]::ReadAllText((Join-Path $root 'package.json'), [Text.Encoding]::UTF8) | ConvertFrom-Json).version.Trim()
     if ($v -ne $want) { throw "版本不一致：$v vs $want" }
     & $cmd --help | Select-Object -First 3 | Out-Host
     Write-Host "   purge --version = $v"
+  }
+
+  Step '中文 / 带空格路径安装（.cmd 不得写非 ASCII 路径）' {
+    $h = Join-Path $tmp '中文 目录\安装 位置'
+    $dest3 = Join-Path $h 'hermes-purge'; $bin3 = Join-Path $h 'bin'
+    & (Join-Path $root 'install.ps1') -Dest $dest3 -Bin $bin3
+    $cmd3 = Join-Path $bin3 'purge.cmd'
+    $shim = [IO.File]::ReadAllText($cmd3)
+    if ($shim -match '[^\x00-\x7F]') { throw ".cmd 里有非 ASCII 字符：$shim" }
+    if ($shim.Contains($dest3)) { throw '.cmd 里写死了安装路径' }
+    $v3 = (& $cmd3 --version).Trim()
+    if ($v3 -notmatch '^\d+\.\d+\.\d+$') { throw "中文路径下 purge --version 失败：$v3" }
+    Write-Host "   中文路径 → purge --version = $v3"
   }
 
   Step 'install.ps1 -Setup -Yes（一条命令装完即应用）' {
