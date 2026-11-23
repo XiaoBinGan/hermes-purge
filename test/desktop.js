@@ -111,6 +111,12 @@ t('script 标签带内容指纹（避免 Electron 跑旧缓存）', () => {
   desktop.uninstall(dir);
 });
 
+t('生成的脚本里没有坏转义（模板字符串会吃掉 \\s / \\d）', () => {
+  const src = desktop.panelSource('<html></html>', { version: 'x' });
+  const bad = src.split('\n').filter((l) => !/^\s*\/\//.test(l) && /\/[sdwSDW]\+/.test(l));
+  assert.strictEqual(bad.length, 0, '有坏转义：' + bad.slice(0, 2).join(' | '));
+});
+
 t('注入脚本不读布局（getBoundingClientRect 会把 Electron renderer 卡死）', () => {
   const src = desktop.panelSource('<html></html>', { version: 'x' });
   const hits = src.split('\n').filter((l) => l.includes('getBoundingClientRect') && !l.trim().startsWith('//'));
