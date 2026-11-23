@@ -4,8 +4,8 @@
 然后提交到 `lane/mac` 并 push。**不碰** `lib/anchors/hermes-win.js`、**不直推** `main`、
 **不随手改版本号**（版本由集成方在合并时改）。
 
-- [ ] **配置层写入幂等审计**：`yamlMaxTokens` / `yamlPrefill` / `appendEnv` 是否存在和
-      `yamlApprovals` 同类的坑（重复 apply 叠 marker、值没真写进去）
+- [x] **配置层写入幂等审计**（3.1.7）：`yamlMaxTokens` 在根上无 `model:` 段时直接 no-op
+      → C15 永远 pending；追加路径的 approvals 风格不统一 → 一并修掉，测试 +2
 - [ ] **`.env` 幂等 + 去重**：`appendEnv` 现在的行为在重复 apply 下是否稳定
 - [ ] **`purge serve` launchd 守护**：macOS 开机自启，面板按钮不依赖手动起服务
 - [ ] **面板自动刷新**：宿主状态变化后（apply/revert）自动重建快照，不用手动 `desktop sync`

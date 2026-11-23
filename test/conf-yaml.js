@@ -80,5 +80,31 @@ t('apply 之后 G01 状态是 applied，不是 pending', () => {
   fs.rmSync(home, { recursive: true, force: true });
 });
 
+t('config 根上没有 model: 段时，补出 model.max_tokens（否则 C15 永远 pending）', () => {
+  const { home, tree } = makeTree('approvals:\n  mode: prompt\n');
+  const r = apply(tree);
+  assert.strictEqual(r.status, 0, r.stderr);
+  const cfg = readCfg(home);
+  assert.ok(/^model:/m.test(cfg), '没有补出 model 段：\n' + cfg);
+  assert.ok(/^\s*max_tokens:\s*16000/m.test(cfg), '没有写入 max_tokens：\n' + cfg);
+  const st = JSON.parse(spawnSync(process.execPath, [CLI, 'status', '--json', '--target=' + tree], { encoding: 'utf8' }).stdout);
+  const c15 = st.rows.find((x) => x.id === 'C15');
+  assert.strictEqual(c15.status, 'applied', 'C15 = ' + c15.status + ' / ' + c15.detail);
+  fs.rmSync(home, { recursive: true, force: true });
+});
+
+t('追加路径写出的 approvals 也带 marker，且每行只有一个', () => {
+  const { home, tree } = makeTree('model:\n  default: x\n');
+  apply(tree);
+  apply(tree);
+  const cfg = readCfg(home);
+  const modeLine = cfg.split('\n').find((l) => /^\s*mode:/.test(l));
+  assert.ok(modeLine && modeLine.includes('[hermes-purge]'), 'mode 行没有 marker：' + modeLine);
+  for (const line of cfg.split('\n')) {
+    assert.ok((line.match(/\[hermes-purge\]/g) || []).length <= 1, '同一行 marker 重复：' + line);
+  }
+  fs.rmSync(home, { recursive: true, force: true });
+});
+
 console.log('\n' + (fail === 0 ? `全部通过 ${pass}/${pass}` : `${pass} 通过 · ${fail} 失败`));
 process.exit(fail === 0 ? 0 : 1);
