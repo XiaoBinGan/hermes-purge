@@ -18,6 +18,32 @@ macOS 与 Windows 现在各管一台机器，要求「绝对不能冲突」。�
 - 版本号只在集成方改，泳道分支不碰 —— 去掉最常见的必冲突项
 - 联调验证：重构后本机 31/31 不变、全量 41+30+33+12+16+10+7+12+DOM 全绿、package 16/16
 
+### Windows 侧修复（lane/win）
+
+1. **`.cmd` 里不出现真实路径**：旧 `install.ps1` 用 `Set-Content -Encoding ASCII` 把安装目录写进批处理，
+   中文路径变成 `G:\????`，任何 `purge` 调用都 `MODULE_NOT_FOUND`；改成 `%~dp0` 启动器 + UTF-8 路径文件，
+   并把 `install.ps1` 自身转成 **UTF-8 with BOM**（PS 5.1 只按 BOM 判定脚本编码）。
+2. **Git Bash 里 `ln -s` 退化成复制**：`~/.hermes-purge` 变成旧副本、且只写 bash shim（PowerShell 跑不了）。
+   现在识别 MINGW/MSYS/Cygwin，仓库位置用 `mklink /J` 目录联接（免管理员、改代码即时生效），
+   命令写成纯 ASCII 的 `purge.cmd` / `hp.cmd`，新增 `--relink` 重建联接，卸载用 `rmdir` 只删链接。
+3. **Windows 运行时**：`spawnAny`（`.bat/.cmd` 经 `cmd.exe`，Node ≥20 直连 EINVAL）· `pyEnv` 强制 UTF-8 ·
+   `_ast.py` 的 `ensure_ascii` + BOM 保留 · `pickPython` 真探一次再认 —— 这四项之前只活在临时副本里，现在进仓库。
+4. **`replace` 型 cap 的判活**：`to` 里没带 cap id 的老补丁会被误判成 drifted（C13/C14/C16）。现在认
+   「`to` 里那行带 `[hermes-purge]` 的代码」即算 applied。
+5. **`yamlApprovals`（G01）**：宿主回写成 `mode: smart` 时旧代码只改 timeout、永远 pending；现在有 mode 就改、
+   没有就插，并把重复的 `# [hermes-purge]` 收敛成一个。
+6. **`win-lane` 锚点**：本机 `chat_completions.py` 的 import 块不走主锚，C20b 在 `lib/anchors/hermes-win.js` 里
+   补了真实相邻行（`import hashlib` / `import json`）。
+7. **测试可移植**：`desktop-dom.js` 不再写死 `/Users/supre/...` 的 jsdom；`test/win/run-engine.ps1` 与
+   `run-smoke.ps1` 不再写死 `C:\purge-test`（现场生成锚点文件 / 相对路径）；新增 `npm run test:engine`、
+   `npm run test:win`，以及「仓库里每个 `.ps1` 必须带 UTF-8 BOM」的守卫断言。
+
+8. **安装主路径简化**：README 顶部改成 npm 两行（Release 的 `hermes-purge.tgz` 稳定别名）——
+   不需要 GitHub 账号 / npm token / 改 PATH，Windows 的 cmd、PowerShell、Git Bash 同一条命令。
+
+真机结果（Win11 · Node 25 · Python 3.12 · PS 5.1）：`npm test` 全绿（41/33/33/15/16/10/7/12/16 + DOM）·
+`test:win` `SMOKE_EXIT=0` · `test:engine` `ENGINE_OK` · 真实宿主 `status` 31/31、`verify --level=2` 通过、`doctor` 健康。
+
 ## 3.1.3 —— 安装不再需要登录（Release 自举）
 
 问题：之前只给了 GitHub Packages 的装法，而那条路要求 `~/.npmrc` 里放 token —— 没登录 GitHub 的人装不了。

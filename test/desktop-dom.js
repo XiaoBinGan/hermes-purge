@@ -1,11 +1,21 @@
 // 用宿主仓库里的 jsdom 真实跑一遍注入脚本，验证 ul>li 判定
 // jsdom 借用宿主仓库里的（本仓零依赖）。找不到就跳过：这只验注入逻辑，不是必跑项。
+const pathMod = require('path');
+const os = require('os');
 let JSDOM = null;
-for (const p of [
-  '/Users/supre/.hermes/hermes-agent/node_modules/jsdom',
-  process.env.HERMES_REPO ? require('path').join(process.env.HERMES_REPO, 'node_modules/jsdom') : '',
-].filter(Boolean)) {
+// 宿主仓库优先（借用它的依赖，本仓仍是零依赖）；找不到就用本仓 devDeps 里临时装的。
+// 以前这里写死了 /Users/supre/... —— 只有那台 Mac 能跑，Windows 永远「跳过」。
+const candidates = [
+  process.env.HERMES_REPO ? pathMod.join(process.env.HERMES_REPO, 'node_modules/jsdom') : '',
+  process.env.HERMES_HOME ? pathMod.join(process.env.HERMES_HOME, 'hermes-agent', 'node_modules', 'jsdom') : '',
+  pathMod.join(os.homedir(), '.hermes', 'hermes-agent', 'node_modules', 'jsdom'),
+  pathMod.join(__dirname, '..', 'node_modules', 'jsdom'),
+].filter(Boolean);
+for (const p of candidates) {
   try { JSDOM = require(p).JSDOM; break; } catch (e) { /* 继续找 */ }
+}
+if (!JSDOM) {
+  try { JSDOM = require('jsdom').JSDOM; } catch (e) { /* 都没有 */ }
 }
 if (!JSDOM) { console.log('跳过 DOM 注入用例（没找到 jsdom）'); process.exit(0); }
 const desktop = require('../lib/v2/desktop.js');

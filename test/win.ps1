@@ -1,4 +1,4 @@
-# win.ps1 — Hermes 桌面窗口操作：list / focus / rect / shot
+﻿# win.ps1 — Hermes 桌面窗口操作：list / focus / rect / shot
 # 用法: pwsh -File win.ps1 list|focus|rect|shot -Out x.png
 param(
   [Parameter(Position = 0)][string]$Action = 'list',

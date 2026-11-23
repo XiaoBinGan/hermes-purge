@@ -10,6 +10,24 @@
 .\test\win\run-engine.ps1
 ```
 
+## 2026-11-24 实测记录（lane/win，Windows 11 真机）
+
+| 项 | 环境 | 结果 |
+|---|---|---|
+| 单元测试 | Win11 · Node v25.0.0 · Python 3.12（mambaforge）· PS 5.1 · Git Bash | smoke 41/41 · v2 33/33 · dsh 33/33 · setup 15/15 · bench 16/16 · plugin 10/10 · control 7/7 · desktop 12/12 · **desktop-dom 全部通过** · package 16/16 |
+| `windows-smoke.ps1` | 同上 | `SMOKE_EXIT=0`，8 步全 OK，含「中文 + 空格路径安装 → purge --version = 3.1.4」 |
+| `test/win/run-engine.ps1` | 同上 | `ENGINE_OK`：apply 退出 0 · C01/C07/C09 落地 · verify L1 通过 · revert 后三个文件 SHA256 与原件一致 |
+| 真实 Hermes 安装 | `G:\hermes\hermes-agent` | `purge status` 31/31 applied · `verify --level=2` 通过 · `doctor` 健康（shim 22 条「宿主无此属性」单列跳过，不计失败） |
+
+同一轮修掉的 Windows-only 问题（都在真实机器上复现过）：
+
+- `install.sh` 在 Git Bash 里 `ln -s` 退化成「复制」→ `~/.hermes-purge` 是旧副本；现在用 `mklink /J` 目录联接，`--relink` 可重建
+- `.cmd` 里写中文路径被 ASCII 编码毁成 `G:\????` → 改成 `%~dp0` 启动器 + UTF-8 路径文件
+- AST 层 `bad-helper-output`（`.bat` 代理 spawn EINVAL / cp936 乱码）→ `spawnAny` + `PYTHONUTF8`
+- `desktop-dom` 写死 `/Users/supre/...` 的 jsdom → 改成按候选列表找（本仓 devDep 也行），Windows 上终于不是「跳过」
+- `test/win/run-engine.ps1` 与 `run-smoke.ps1` 写死 `C:\purge-test` → 改成自建临时树/相对路径，任何 Windows 机器可跑
+- `.ps1` 缺 UTF-8 BOM → 新增 `test/setup.js` 守卫：仓库里每个 `.ps1` 必须带 BOM
+
 ## 2026-11-23 实测记录
 
 | 项 | 环境 | 结果 |
