@@ -26,7 +26,7 @@ cd hermes-purge
 ### 2. 一条命令装好并应用
 
 ```bash
-npm i -g hermes-purge && purge setup --yes      # 任意平台，最简单
+npm i -g hermes-purge && purge setup --yes      # 任意平台（npm 审核通过后可用）
 ```
 
 ```bash
@@ -254,7 +254,8 @@ purge setup
 | 把 `bin` 加进 PATH | 不想装包，只想少打几个字 | 见「方式三」 |
 
 **前置**：Node **≥ 18**（`node -v` 确认；用到内置 `fetch` / `WebSocket`）。零依赖，不需要 `npm install`。
-npm 上已发布：`npm i -g hermes-purge`（[npmjs.com/package/hermes-purge](https://www.npmjs.com/package/hermes-purge)）。
+npm 上已提交 `hermes-purge@3.1.1`（首次发布走 npm 的 staged 流程，**审核通过后**才能 `npm i -g hermes-purge`；
+在此之前请用 Release 里的 tgz 或下面的脚本安装）。
 
 **动手之前先 `purge status`**。它只读、不写盘，先把这棵树的漂移基线记下来：
 
