@@ -1,5 +1,51 @@
 # Changelog
 
+## 3.1.6 —— 支持 Hermes 0.21.4（31/31），修两个只有新版本才暴露的 bug
+
+在 pristine 的 0.21.4 树（`git archive HEAD` + 最小 config/env/SOUL）上跑，先暴露两个真问题，
+修完后 **31/31 applied、L1 14 项 + L2 14 项通过、`revert` 代码逐字节还原**。
+
+### ① 文本层 sentinel 不匹配 → 「改成功了却报 drifted」
+
+判定逻辑是「文件里有没有 `[hermes-purge] <cap id>`」，但 C01 / C09 / C10 / C13 / C14 / C16
+的主锚替换里注释**没写 cap id**。0.21.4 没有 AST 兜底，文本层是唯一实现，于是：
+
+```
+apply  → 改写 31 · 未命中 0      （真的改对了，文件里也有 marker）
+status → C13/C14/C16 drifted     （因为找不到 "[hermes-purge] C13"）
+```
+
+修法：给这 6 条加**显式 sentinel**（替换后独有的那一行，比如
+`{"role": "user", "content": effective_system}, {"role": "assistant", "content": "ok"}`），
+由 `adapters/hermes/caps.js` 带进 spec；注释怎么写都不再影响判定。
+
+### ② `approvals` 段只改 timeout、不改 mode，且重复 apply 叠注释
+
+`yamlApprovals` 的写入分支在「已有 approvals 段」时只处理 timeout —— 宿主的
+`mode: prompt` 一直留着，G01 永远 pending；同时 timeout 行每 apply 一次就多一个
+`# [hermes-purge]`（实测出现 `# [hermes-purge]  # [hermes-purge]`）。
+
+修法：按块重写 —— `mode` 统一成 `'off'`、`timeout` 统一成 `86400`，两者都走同一套
+「有则替换、无则插入」，并把 marker 收敛为每行最多一个。
+
+### ③ 变体继承了主锚的 sentinel → 0.21.0 上 C16 反而变 drifted
+
+给主锚加显式 sentinel 后，`adapters/hermes/caps.js` 把主锚的 sentinel 也塞给了变体。
+但变体的替换文本写的是 `# [hermes-purge] C16 tail-prefill`（多一个 id），
+主锚 sentinel 是 `# [hermes-purge] tail-prefill` —— 于是 0.21.0 机器上 C16 从 applied 退回 drifted。
+
+修法：变体**不继承**主锚 sentinel，只用自己显式声明的，否则回落到默认 `[hermes-purge] <id>`
+（变体本来就都带 cap id）。
+
+### 测试
+
+- 新增 `test/conf-yaml.js` 4 项：mode 改 off / 重复 apply 幂等 / 无 approvals 段时整段追加 /
+  apply 后 G01 必须是 applied
+- 新增 `test/sentinel.js` 2 项：每条 replace/splice 的替换文本必须含它自己的 sentinel；
+  变体不得继承主锚 sentinel —— 直接锁死这三个坑
+
+两个模型一起验：0.21.0 实机 `31/31`，0.21.4 沙箱 `31/31` + L1/L2 通过。
+
 ## 3.1.5 —— `purge parity`：两台机器「效果一样」有据可查
 
 分工定下来后（mac 我管、win 他们管），需要一条能证明「两边效果一致」的东西，

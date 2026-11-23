@@ -4,7 +4,7 @@
 让模型被拒时自动重采样。31 条能力、四层落地（AST / 运行时 shim / 文本 / 配置）、
 改坏了能逐字节回滚。
 
-**一条命令安装，一条命令撤销。** 当前版本 **3.1.5** · 零依赖 · Node ≥18 · macOS + Windows 实测。
+**一条命令安装，一条命令撤销。** 当前版本 **3.1.6** · 零依赖 · Node ≥18 · macOS + Windows 实测。
 
 > 借鉴了 [dsh-purge](https://github.com/YuJunZhiXue/dsh-purge) 的一个判断（「不跟模型讲道理，直接改宿主」），
 > 但引擎、补丁清单、验证方式、CLI 都是为 Hermes 独立写的 —— 没有一行共享代码。逐条对账见下文「我们比它强在哪」。
@@ -418,7 +418,7 @@ npm rm -g hermes-purge
 |---|---|---|---|
 | 0.21.0 | 主锚不成立，走 **18 条变体** | **已实测** —— `~/.hermes/hermes-agent`，宿主 python 3.11；`status` applied 31 / pending 0 / drifted 0，`doctor` 健康，L2 14 项全绿 | **未实测** |
 | 0.21.3 | 主锚，0 处变体 | **未实测** | **已实测** —— CRLF 树闭环；另在 **Win11 ARM 真机**上跑通补丁层工具链（见下） |
-| 0.21.4 | 主锚，0 处变体 | **未实测** | **已实测** —— 与 0.21.3 同一布局，走主锚；同上 |
+| 0.21.4 | 主锚，0 处变体 | **未实测** | **已实测** —— 沙箱（pristine `git archive` + 最小 config）上 `31/31 applied`、L1 14 项 + L2 14 项通过、`revert` 代码逐字节还原 |
 
 - **0.21.0 为什么走变体**：0.21.2/0.21.3 才做的模块拆分（`approval_context` / `approval_detection` / `turn_stop_gates` / `stream_delivery` / `turn_request_assembly`）。0.21.0 里这些函数还在 `tools/approval.py`、`agent/conversation_loop.py`、`run_agent.py`。走变体的 18 条：C04 C05 C06 C11 C12 C13 C14 C16 C18 C18b C18c C18d C19b C19c C19d C19e C20 C20b。
 - **0.21.3+ 为什么不用变体**：主锚直接命中。`--status`（1.x）里一条 `[0.21.0]` 标记都不该出现。
