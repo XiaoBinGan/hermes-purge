@@ -89,7 +89,8 @@ function buildCaps() {
     if (shimMeta) impls.push({ kind: 'shim', shimMeta });
 
     // 文本 / 配置层永远作为最后一道（1.x 已验证过的锚点，含 0.21.0 变体）
-    impls.push({ kind: 'text', spec: p });
+    // 把 patch 上显式声明的 sentinel 带进 spec（否则文本层只认 `[hermes-purge] <id>`）
+    impls.push({ kind: 'text', spec: p.sentinel ? Object.assign({}, p, { sentinel: p.sentinel }) : p });
 
     caps.push({
       id: p.id,
@@ -99,7 +100,9 @@ function buildCaps() {
       astMeta: astMeta || null,
       shimMeta: shimMeta || null,
       impls,
-      variants: (p.variants || []).map((v) => ({ kind: 'text', spec: Object.assign({}, v, { file: v.file }) })),
+      // 变体**不继承**主锚的 sentinel：两者的替换文本不同（变体的注释里带 cap id，
+      // 主锚的注释不带），继承会让变体永远判定不上 —— 实测就踩过 C16 在 0.21.0 上变 drifted。
+      variants: (p.variants || []).map((v) => ({ kind: 'text', spec: Object.assign({}, v, { file: v.file, sentinel: v.sentinel }) })),
     });
   }
   return caps;
