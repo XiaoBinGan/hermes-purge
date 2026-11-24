@@ -120,7 +120,8 @@ purge parity --diff=mac.json     # 在另一台机器上比对，一致返回 0�
 ---
 
 > **两条泳道并行**：macOS 与 Windows 各自维护自己的锚点文件与分支，互不覆盖。
-> `main` 已开分支保护（必须走 PR，直推会被拒绝）；规则见 [`docs/lanes.md`](docs/lanes.md)
+> `main` 已开分支保护（必须走 PR，直推会被拒绝）；规则见 [`docs/lanes.md`](docs/lanes.md)、
+> 同步板 [`docs/lane-sync.md`](docs/lane-sync.md)
 > （分支 `lane/mac` / `lane/win` / `lane/win-merge`，`main` 只做集成；`lane/win*` 两个分支跟 `main` 同一个提交）。
 
 ## 它到底改了什么（30 秒版）
