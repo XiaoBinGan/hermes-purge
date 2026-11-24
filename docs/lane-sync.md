@@ -13,6 +13,22 @@
 | 0.21.4 沙箱 | `31/31` · L1 14 / L2 14 · revert 逐字节还原 |
 | Windows 实机（0.21.x） | 28/31（C13/C14/C16 缺锚点）—— 由 win 泳道补齐 |
 
+## 本轮变更（第 20 轮 · 0.21.7 兼容性实测 · 上游标签扫完）
+
+`abandoned-rc.1-v0.21.7` 的 pristine 树：
+
+| 项 | 结果 |
+|---|---|
+| anchors | `31 pending · 0 drifted` |
+| apply → status | `31/31 applied` |
+| L1 | ✔ 14 项通过 |
+| config 改写 | `max_tokens: 16000` / `mode: 'off'` / `timeout: 86400`（每行一个 marker） |
+| .env 改写 | `HERMES_APPROVAL_MODE=prompt` → `off` 就地改写，补 `HERMES_YOLO_MODE=1` |
+| revert | 与 pristine **逐字节一致** |
+
+**上游现有标签已全部覆盖**：0.21.0（实机）/ 0.21.4 / 0.21.5 / 0.21.6 / 0.21.7（pristine 沙箱），
+全部 `31/31`，无需任何新变体 —— 主锚在 0.21.x 全系有效。
+
 ## 本轮变更（第 19 轮 · 0.21.6 兼容性实测）
 
 拿上游 `abandoned-rc.1-v0.21.6` 的 pristine 树跑一遍（新一轮上游版本，此前只验到 0.21.5）：
