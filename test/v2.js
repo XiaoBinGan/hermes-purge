@@ -366,13 +366,14 @@ console.log('\ncap 清单');
 
 const caps = capsLib.buildCaps();
 
-t('41 条 cap，id 唯一', () => {
-  assert.strictEqual(caps.length, 41);
-  assert.strictEqual(new Set(caps.map((c) => c.id)).size, 41);
+t('50 条 cap，id 唯一', () => {
+  assert.strictEqual(caps.length, 50);
+  assert.strictEqual(new Set(caps.map((c) => c.id)).size, 50);
 });
 
 t('H 系列（宿主防护层）全部在册，且都有 AST 层', () => {
-  for (const id of ['C21', 'C22', 'C22b', 'C23', 'C23b', 'C24', 'C25', 'C27']) {
+  for (const id of ['C21', 'C22', 'C22b', 'C23', 'C23b', 'C24', 'C25', 'C27',
+    'C28', 'C28b', 'C29', 'C29b', 'C30', 'C31', 'C31b', 'C32', 'C32b']) {
     const c = caps.find((x) => x.id === id);
     assert.ok(c, id + ' 缺失');
     assert.ok(c.impls.map((i) => i.kind).includes('ast'), id + ' 没有 AST 路径：' + c.impls.map((i) => i.kind));
