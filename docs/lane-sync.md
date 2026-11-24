@@ -7,11 +7,49 @@
 
 | 项 | 值 |
 |---|---|
-| main / lane/mac / lane/win | `1cce452`（mac 侧已推到 3.1.7 的改动，待合并） |
-| 版本 | 3.1.6（main）/ 3.1.7 改动在 `lane/mac` |
-| macOS 实机（Hermes 0.21.0） | `caps 31 · applied 31 · drifted 0` · L1 9 / L2 14 |
-| 0.21.4 沙箱 | `31/31` · L1 14 / L2 14 · revert 逐字节还原 |
-| Windows 实机（0.21.x） | 28/31（C13/C14/C16 缺锚点）—— 由 win 泳道补齐 |
+| 分支 | `main` = `ef05392`；`lane/mac` 已合并 main 全部内容（落后 0），另有 30 个提交 |
+| 版本 | 3.7.3（两边一致） |
+| 补丁面 | **77 条**（两边 cap 清单完全一致） |
+| macOS 实机（Hermes 0.21.0） | `caps 77 · applied 65 · pending 0 · drifted 0` · L1 19 / L2 14 通过 |
+| 0.21.4 / 0.21.5 沙箱 | `applied 72 · drifted 0` |
+| 效果指纹 | `purge parity --out=mac.json` → 65/77（code 52/64 · config 11/11 · prompt 2/2） |
+
+## ⚠️ Windows 侧待办（2026-11-24 22:50 更新，三件事）
+
+### ① 三条 cap 的锚点在任何版本都不存在 —— 在 main 上永远不生效
+
+`lib/patches.js` 里这三条的主锚写的是上游根本不存在的函数：
+
+| cap | 主锚（不存在） | 真实入口 |
+|---|---|---|
+| C31 | `_scan_text` | `tools/skills_guard.py: scan_file()` |
+| C31b | `_padded_code_findings` | `tools/skills_guard.py: scan_skill()` |
+| C32b | `is_blocked_device_path` | `agent/file_safety.py: get_read_block_error()` |
+
+mac 侧在 `lib/anchors/hermes-0.21.0-addendum.js` 里补了变体，实测**真正生效**（运行时验过：
+`scan_file → []`、`scan_skill → ScanResult`）。main 上这三条会一直是 `drifted`。
+
+### ② 六条 cap 需要 `since` 标注，否则老宿主永远报 drifted
+
+`C26 / C27 / C51` → `since: '0.21.4'`；`C42 / C43 / C50` → `since: '0.21.99'`（锚点待修）。
+没有标注时，0.21.0 这类宿主上它们恒为 `drifted`，「drifted 0」这个判据就废了。
+
+### ③ `insertAfter` 判活太松 —— 可能整片假 applied
+
+`lib/v2/impls.js` 的老判定是「锚点后 240 字符内出现同样的 `return X` 就算 applied」。
+函数体本来就常以同样的 return 开头 → **没打补丁也报 applied**。mac 侧已改成必须见到
+「插入句 + `  # [hermes-purge]`」。**建议 Windows 先自查**：
+
+```bash
+purge status --json | python3 -c "
+import json,sys
+print(sum(1 for r in json.load(sys.stdin)['rows'] if r['status']=='applied'), 'applied')"
+grep -c 'hermes-purge' G:/hermes/hermes-agent/tools/terminal_tool_guards.py
+# 状态说 applied 但文件里 marker 数是 0 → 就是这个 bug
+```
+
+**拿到修复**：`git merge origin/lane/mac`（不会碰 `lib/anchors/hermes-win.js`），
+或直接 `git checkout origin/lane/mac -- lib/v2/impls.js lib/patches.js` 只取这两处。
 
 ## 本轮变更（第 20 轮 · 0.21.7 兼容性实测 · 上游标签扫完）
 
