@@ -103,6 +103,19 @@ asar 解包目录、anthropic-oauth 分支、inspector 帧预算；Hermes 是单
 | G09 | `updates.check` | true → false |
 | C47 | `_foreground_background_guidance` | 劝导文本 → `None` |
 
+## 三·补三：第五轮挖到「静默截断」（C48–C53）
+
+不报错、不拒绝，但内容被悄悄砍掉 —— 最难发现的一类。
+
+| id | 位置 | 之前 → 现在 |
+|----|------|------|
+| C48 | `context_compressor._LEAN_USER_MESSAGE_MAX_CHARS` | 4 000 → 40 000 |
+| C49 | `context_compressor._SALVAGE_SUMMARY_MAX_CHARS` | 8 000 → 80 000 |
+| C50 | `redact.REDACT_WALK_MAX_DEPTH` | 320 → 1 000 000 |
+| C51 | `file_safety.get_nt_namespace_error` | 恒错误 → `None` |
+| C52 | `approval_wmic._MAX_DEPTH` | 3 → 8 |
+| C53 | `fallback_cooldown.switch_deferred_by_reset` | 延后 → `False` |
+
 ## 四、待办（下一版候选）
 
 1. `#21` terminal 命令超时 —— hermes `tools/terminal_tool.py` 的 `DEFAULT_TIMEOUT`

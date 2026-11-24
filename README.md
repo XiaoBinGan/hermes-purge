@@ -1,10 +1,10 @@
 # hermes-purge
 
 **给 Hermes Agent 打「能力层」补丁**：关掉审批/护栏/命令黑名单，换掉提示词人格，
-让模型被拒时自动重采样。71 条能力、四层落地（AST / 运行时 shim / 文本 / 配置）、
+让模型被拒时自动重采样。77 条能力、四层落地（AST / 运行时 shim / 文本 / 配置）、
 改坏了能逐字节回滚。
 
-**一条命令安装，一条命令撤销。** 当前版本 **3.6.1** · 零依赖 · Node ≥18 · macOS + Windows 实测。
+**一条命令安装，一条命令撤销。** 当前版本 **3.7.0** · 零依赖 · Node ≥18 · macOS + Windows 实测。
 
 > 借鉴了 [dsh-purge](https://github.com/YuJunZhiXue/dsh-purge) 的一个判断（「不跟模型讲道理，直接改宿主」），
 > 但引擎、补丁清单、验证方式、CLI 都是为 Hermes 独立写的 —— 没有一行共享代码。逐条对账见下文「我们比它强在哪」。
@@ -126,7 +126,7 @@ purge parity --diff=mac.json     # 在另一台机器上比对，一致返回 0�
 | 配置 | `approvals.mode=off`、`model.max_tokens=16000`、prefill、`.env` |
 | 代码 | 审批门、审批模式、编辑确认、护栏、命令黑名单、系统提示词注入位置 |
 
-71 条能力，每条都带断言；改坏了能逐字节回滚。
+77 条能力，每条都带断言；改坏了能逐字节回滚。
 
 ---
 
@@ -163,7 +163,7 @@ purge parity --diff=mac.json     # 在另一台机器上比对，一致返回 0�
 Hermes Agent 有若干层「不让你做某件事」的机制。这个工具把它们逐层拆掉，
 并额外提供一套执行器，让模型在被拒时自动重试。
 
-**清洗器**：71 条补丁，分四层
+**清洗器**：77 条补丁，分四层
 
 | 层 | 改什么 |
 |----|--------|
@@ -200,7 +200,7 @@ cd hermes-purge
 node bin/hermes-purge.js --status
 ```
 
-会列出 71 条补丁各自是 `applied` / `pending` / `drifted` / `missing`。
+会列出 77 条补丁各自是 `applied` / `pending` / `drifted` / `missing`。
 
 如果显示「找不到 Hermes 安装目录」，用下面任一方式指定：
 
@@ -608,7 +608,7 @@ opener 拼接去重、路径解析、补丁清单完整性。
 
 ---
 
-## 71 条补丁明细
+## 77 条补丁明细
 
 ### 代码层 · 审批与拒答（25 条）
 
@@ -688,6 +688,17 @@ opener 拼接去重、路径解析、补丁清单完整性。
 |----|------|------|
 | C47 | `tools/terminal_tool_guards.py` | `_foreground_background_guidance` 恒 `None`（长跑命令不再被改判成后台）|
 
+### 代码层 · 上下文截断常量（5 条）
+
+| id | 位置 | 改动 |
+|----|------|------|
+| C48 | `agent/context_compressor.py` | `_LEAN_USER_MESSAGE_MAX_CHARS` 4000 → 40000（压缩时用户消息不再被砍）|
+| C49 | 同上 | `_SALVAGE_SUMMARY_MAX_CHARS` 8000 → 80000（抢救摘要不再只留 8k）|
+| C50 | `agent/redact.py` | `REDACT_WALK_MAX_DEPTH` 320 → 1000000（嵌套不再触发 `[redacted: nesting limit]`）|
+| C51 | `agent/file_safety.py` | `get_nt_namespace_error` 恒 `None`（NT/设备命名空间路径可读）|
+| C52 | `tools/approval_wmic.py` | `_MAX_DEPTH` 3 → 8（命令树展开更深）|
+| C53 | `agent/fallback_cooldown.py` | `switch_deferred_by_reset` 恒 `False`（限流窗口快开时也照切模型）|
+
 ### 配置层（11 条）
 
 一个通用实现 `yamlSet` 覆盖多键：`{ key: 'section.key', value, mode }`，数值按下界比较、布尔按等值，
@@ -720,7 +731,7 @@ opener 拼接去重、路径解析、补丁清单完整性。
 
 ## v2：能力层（capability layer）
 
-1.x 是「31 条文本补丁」。v2 把它升级成「71 条能力 + 每条 4 条落地路径」：
+1.x 是「31 条文本补丁」。v2 把它升级成「77 条能力 + 每条 4 条落地路径」：
 
 | 层 | 做法 | 抗什么 |
 |---|---|---|
@@ -793,7 +804,7 @@ lib/v2/caps.js         门面：buildCaps({adapter,target})，缺省探测、探
 lib/v2/impls.js        文本层（宿主无关，两个 adapter 共用）
 lib/v2/conf.js         配置层 conf kind：yamlEntry / yamlTop / jsonSet / jsonAppend / fileWrite
 lib/v2/shim-node.js    Node 宿主 shim：NODE_OPTIONS=--require 预加载 + 模块导出替换
-adapters/hermes/       71 条 cap（原封不动）+ Python AST / site-packages shim / L1-L3
+adapters/hermes/       77 条 cap（原封不动）+ Python AST / site-packages shim / L1-L3
 adapters/dsh/          40 条 cap + conf/text/shim + node --check / 断言 L2
 ```
 
@@ -852,7 +863,7 @@ Windows 语义下的三个必踩坑，都已用 CRLF 树实测修掉：
 | 观测 | 无 | `metrics.jsonl` + `purge stats`：轮次 / 拒答收敛 / 重采样均值 / cap 命中 / tokens 成本（shim 的 turn 钩子每轮写一条） | `purge stats` |
 | 平台 | 未注明 | macOS + Windows 都实测；CRLF 三个坑（AST 插行写坏文件、锚点 LF 匹配不上、venv 双布局）已修并由 CRLF 树闭环验证 | `test/v2.js --e2e <CRLF 树>` |
 | 宿主绑定 | 绑死 DSH | **adapter 注册表**：cap 只描述行为，落地层不认识宿主；Hermes（实测）+ DSH（规格验证）两个 adapter 并存 | `lib/v2/adapters.js` |
-| 规模思路 | 88 条 patch（同一行为常有多种表述） | Hermes 71 条 cap、DSH 40 条 cap（由 88 条按行为收敛），每条带断言；不做条数竞赛 | `purge status` 的 `cap` 列 |
+| 规模思路 | 88 条 patch（同一行为常有多种表述） | Hermes 77 条 cap、DSH 40 条 cap（由 88 条按行为收敛），每条带断言；不做条数竞赛 | `purge status` 的 `cap` 列 |
 
 ### 三条我们刻意做得比它狠的
 
@@ -1027,7 +1038,7 @@ hermes-purge/
 ├── .gitattributes             统一换行
 ├── bin/
 │   ├── hp.js                  一条命令入口（自动判断）
-│   ├── hermes-purge.js        清洗器（71 条补丁）
+│   ├── hermes-purge.js        清洗器（77 条补丁）
 │   ├── hermes-p.js            破甲执行器（直连 / 子进程）
 │   ├── dashboard-chat.js      Dashboard WebSocket 通道
 │   ├── probe.js               效力边界探针

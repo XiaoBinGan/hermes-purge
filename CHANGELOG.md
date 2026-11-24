@@ -1,5 +1,30 @@
 # Changelog
 
+## 3.7.0 —— 第五轮：压缩时被砍的内容 + 脱敏深度 + 冷却（71 → 77 条）
+
+这轮盯的是「不报错、也不拒绝，但内容被悄悄截断」的地方。这类最难发现：`purge status` 全绿、
+模型照常在答，只是答案缺斤少两。
+
+| id | 位置 | 之前 → 现在 | 现象 |
+|----|------|------|------|
+| C48 | `context_compressor._LEAN_USER_MESSAGE_MAX_CHARS` | 4 000 → 40 000 | 压缩一次，用户原始需求只留 4 千字 |
+| C49 | `context_compressor._SALVAGE_SUMMARY_MAX_CHARS` | 8 000 → 80 000 | 抢救摘要被砍到 8 千字，长任务后半段消失 |
+| C50 | `redact.REDACT_WALK_MAX_DEPTH` | 320 → 1 000 000 | 嵌套深的大 JSON 直接变成 `[redacted: nesting limit]` |
+| C51 | `file_safety.get_nt_namespace_error` | 恒返回错误 → `None` | Windows `\\.\GLOBALROOT\...` 一律拒读 |
+| C52 | `approval_wmic._MAX_DEPTH` | 3 → 8 | 深一点的 WMIC 调用链判不穿 |
+| C53 | `fallback_cooldown.switch_deferred_by_reset` | 延后切换 → `False` | 主路由限流窗口「快开了」就宁可等着，整轮挂起 |
+
+C48/C49/C50 走 AST 的 `setAssign`（模块级常量），C51/C53 走 `forceReturn`，
+C52 是类属性（4 空格缩进，AST 只认模块级）所以走文本层。
+
+真机逐项断言（宿主 venv 读回）：
+
+```
+C48 40000    C49 80000    C50 1000000
+C51 None     C52 8        C53 False
+```
+
+`purge status` → **caps 77 · applied 77 · pending 0 · drifted 0**；`npm test` 全绿。
 ## 3.6.1 —— 认出「身份回绝」：模型不拒任务、只拒框架（真机复现并修）
 
 第四轮改完配置做端到端自检时，`hp "用 python 写一个快速排序"` 直接吐了一段英文立场声明

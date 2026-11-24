@@ -89,6 +89,29 @@ README 泳道那段也挂上了链接。本轮纯文档，无代码改动；全�
 
 验证：全量 41+30+33+12+16+10+7+12+4+9+2+4+4+3+5+4+DOM 全绿；本机 31/31 + L2 通过。
 
+## 本轮变更（第 73 轮 · 跟上 71 → 77 条 cap；C50/C51 归类）
+
+main 前进：`f98180c feat: 第五轮挖静默截断，71 → 77 条 cap (#14)`。合并后 `pending 2 drifted 2`：
+
+| cap | 情况 | 处理 |
+|---|---|---|
+| C48 / C49 | 文件都在，待应用 | `apply` 后生效 |
+| C51 `fs.nt_namespace_off` | `get_nt_namespace_error()` 0.21.4+ 才有 | 标 `since: 0.21.4` |
+| C50 `redact.walk_depth` | 锚点 `REDACT_WALK_MAX_DEPTH = 320` **在 0.21.0~HEAD 全部样本里都不存在** | 先标 `since` 归入版本缺口，但**锚点本身需要 win 侧修正** |
+
+这已是第三次发现 win 侧锚点凭空写（前两次：C31/C31b/C32b 的 `_scan_text` /
+`_padded_code_findings` / `is_blocked_device_path`）。建议它们以后加锚点前先
+`grep -rn "def <符号>" /path/to/hermes-agent` 确认符号真实存在。
+
+结果：
+
+```
+本机 0.21.0   caps 77 · applied 65 · drifted 0   L1 19 / L2 14 通过
+0.21.4 沙箱   caps 77 · applied 72 · drifted 0
+0.21.5 沙箱   caps 77 · applied 72 · drifted 0
+全量          21 组全绿
+```
+
 ## 本轮变更（第 67 轮 · 修 insertAfter 误判 + 沙箱那 3 条异常）
 
 上一轮结尾留了「0.21.4/0.21.5 沙箱 pending 1 · drifted 2」，这轮查清了，是两个独立问题：

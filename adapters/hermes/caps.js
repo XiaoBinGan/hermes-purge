@@ -68,6 +68,13 @@ const AST_CORE = {
   C45: { module: 'tools.terminal_tool_guards', kind: 'forceReturn', symbol: 'self_repo_block', value: 'None' },
   C46: { module: 'agent.background_review', kind: 'forceReturn', symbol: '_bg_review_auto_deny', value: '"allow"' },
   C47: { module: 'tools.terminal_tool_guards', kind: 'forceReturn', symbol: '_foreground_background_guidance', value: 'None' },
+
+  /* 第五轮：上下文截断常量（setAssign）/ 命名空间 / 冷却 */
+  C48: { module: 'agent.context_compressor', kind: 'setAssign', name: '_LEAN_USER_MESSAGE_MAX_CHARS', value: '40_000' },
+  C49: { module: 'agent.context_compressor', kind: 'setAssign', name: '_SALVAGE_SUMMARY_MAX_CHARS', value: '80_000' },
+  C50: { module: 'agent.redact', kind: 'setAssign', name: 'REDACT_WALK_MAX_DEPTH', value: '1_000_000' },
+  C51: { module: 'agent.file_safety', kind: 'forceReturn', symbol: 'get_nt_namespace_error', value: 'None' },
+  C53: { module: 'agent.fallback_cooldown', kind: 'forceReturn', symbol: 'switch_deferred_by_reset', value: 'False' },
 };
 
 /** shim 层：模块属性替换。同一个函数在 0.21.0/0.21.3 可能住不同模块，所以用 modules 列表 */
@@ -108,6 +115,8 @@ const CAP_NAME = {
   C42: 'terminal.guard.trailing_amp_off', C43: 'terminal.guard.locked_skill_off',
   C44: 'terminal.guard.gateway_off', C45: 'terminal.guard.self_repo_off', C46: 'review.auto_deny_off',
   C47: 'terminal.guard.foreground_nudge_off',
+  C48: 'compaction.lean_user_chars', C49: 'compaction.salvage_chars', C50: 'redact.walk_depth',
+  C51: 'fs.nt_namespace_off', C52: 'approval.wmic_depth', C53: 'failover.no_reset_defer',
   G04: 'config.terminal_budget', G05: 'config.loop_guardrails_off', G06: 'config.context_file_cap',
   G07: 'config.delegation_budget', G08: 'config.compression_deferred', G09: 'config.update_check_off',
   C15: 'budget.max_tokens', C17: 'prompt.prefill_file',
