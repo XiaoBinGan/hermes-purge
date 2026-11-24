@@ -125,9 +125,14 @@ def cmd_locate_batch(path, symbols):
     out = {}
     for symbol in symbols:
         fn = find_func(tree, symbol)
-        out[symbol] = ({"ok": True, "symbol": symbol, "line": fn.lineno,
-                        "col": fn.col_offset, "end_line": fn.end_lineno}
-                       if fn is not None else {"ok": False, "reason": "symbol-not-found"})
+        if fn is None:
+            out[symbol] = None            # 契约：找不到就给 null，不炸整批
+            continue
+        # body_line 与单条 locate 保持一致（函数体第一条语句），否则批量路径会把
+        # 多行签名/docstring 的函数误判成 pending
+        body_line = fn.body[0].lineno if fn.body else None
+        out[symbol] = {"line": fn.lineno, "col": fn.col_offset,
+                       "end_line": fn.end_lineno, "body_line": body_line}
     return {"ok": True, "symbols": out}
 
 
@@ -137,8 +142,13 @@ def cmd_locate(path, symbol):
     fn = find_func(tree, symbol)
     if fn is None:
         return {"ok": False, "reason": "symbol-not-found", "symbol": symbol}
+    # body_line 是「函数体第一条语句」的行号。
+    # probe 要拿它判断「首句是不是我们已经插进去的 return」，用 fn.lineno+1 是错的：
+    # 多行签名（def f(\n *,\n a,\n) -> X:）和带 docstring 的函数都会看错行，
+    # 结果就是改成功了反而报 pending（C34 / C44 / C45 踩过）。
+    body_line = fn.body[0].lineno if fn.body else None
     return {"ok": True, "symbol": symbol, "line": fn.lineno,
-            "col": fn.col_offset, "end_line": fn.end_lineno}
+            "col": fn.col_offset, "end_line": fn.end_lineno, "body_line": body_line}
 
 
 def main(argv):

@@ -138,6 +138,47 @@ if (py) {
     assert.ok(raw.includes('return True\r\n'), JSON.stringify(raw));
   });
 
+  t('locate-many 一次解析多符号（省掉 N-1 次解释器启动）', () => {
+    const f = path.join(tmp, 'ast5.py');
+    fs.writeFileSync(f, 'def a():\n    return 1\n\n\nclass B:\n    def c(self):\n        return 2\n');
+    const r = ast.locateMany(py, f, ['a', 'c', 'nope']);
+    assert.ok(r.ok, JSON.stringify(r));
+    assert.strictEqual(r.symbols.a.line, 1);
+    assert.strictEqual(r.symbols.c.line, 6);
+    assert.strictEqual(r.symbols.nope, null);
+  });
+
+  t('warmLocate 预热后 probeAst 不再起进程（缓存在 impls 里）', () => {
+    const root = path.join(tmp, 'warm');
+    fs.mkdirSync(path.join(root, 'agent'), { recursive: true });
+    const f = path.join(root, 'agent', 'guard.py');
+    fs.writeFileSync(f, 'def verdict(x):\n    return True\n');
+    const caps = [{ id: 'X1', impls: [{ kind: 'ast', sites: [{ symbol: 'verdict', value: 'False' }] }] }];
+    const w = impls.warmLocate(py, root, caps);
+    assert.ok(w.symbols >= 1, JSON.stringify(w));
+    assert.ok(impls.locOf(py, f, 'verdict'), '预热后该命中缓存');
+    assert.strictEqual(impls.locOf(py, f, 'not_there'), null);
+    const probe = impls.probeAst({ symbol: 'verdict', value: 'False' }, 'X1', { py, target: root });
+    assert.strictEqual(probe.status, 'pending', JSON.stringify(probe));
+  });
+
+  t('多行签名 + docstring 的函数：改完要判 applied（不能用 def 行 +1）', () => {
+    const root = path.join(tmp, 'multiline');
+    fs.mkdirSync(path.join(root, 'tools'), { recursive: true });
+    const f = path.join(root, 'tools', 'g.py');
+    fs.writeFileSync(f,
+      'def weird(\n    *,\n    a: int,\n) -> str | None:\n    """doc string first."""\n    return "x"\n');
+    const sp = { symbol: 'weird', value: 'None' };
+    const ctx = { py, target: root };
+    assert.strictEqual(impls.probeAst(sp, 'X9', ctx).status, 'pending');
+    impls.applyAst(sp, 'X9', ctx);
+    assert.strictEqual(impls.probeAst(sp, 'X9', ctx).status, 'applied',
+      '多行签名被误判；body_line 没用上？');
+    const body = fs.readFileSync(f, 'utf8');
+    assert.ok(/return None/.test(body), body);
+    assert.ok(/"""doc string first."""/.test(body), '文档串不该被吃掉');
+  });
+
   t('符号不存在时返回 ok:false 而不是抛栈', () => {
     const f = path.join(tmp, 'ast4.py');
     fs.writeFileSync(f, 'x = 1\n');
@@ -366,14 +407,16 @@ console.log('\ncap 清单');
 
 const caps = capsLib.buildCaps();
 
-t('50 条 cap，id 唯一', () => {
-  assert.strictEqual(caps.length, 50);
-  assert.strictEqual(new Set(caps.map((c) => c.id)).size, 50);
+t('64 条 cap，id 唯一', () => {
+  assert.strictEqual(caps.length, 64);
+  assert.strictEqual(new Set(caps.map((c) => c.id)).size, 64);
 });
 
 t('H 系列（宿主防护层）全部在册，且都有 AST 层', () => {
-  for (const id of ['C21', 'C22', 'C22b', 'C23', 'C23b', 'C24', 'C25', 'C27',
-    'C28', 'C28b', 'C29', 'C29b', 'C30', 'C31', 'C31b', 'C32', 'C32b']) {
+  const guardCaps = ['C21', 'C22', 'C22b', 'C23', 'C23b', 'C24', 'C25', 'C27',
+    'C28', 'C28b', 'C29', 'C29b', 'C30', 'C31', 'C31b', 'C32', 'C32b',
+    'C33', 'C34', 'C35', 'C36', 'C37', 'C38', 'C39', 'C40', 'C41', 'C42', 'C43', 'C44', 'C45', 'C46'];
+  for (const id of guardCaps) {
     const c = caps.find((x) => x.id === id);
     assert.ok(c, id + ' 缺失');
     assert.ok(c.impls.map((i) => i.kind).includes('ast'), id + ' 没有 AST 路径：' + c.impls.map((i) => i.kind));

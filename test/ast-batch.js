@@ -43,31 +43,32 @@ if (!py) {
 
 t('第一次问 alpha：命中', () => {
   const r = ast.locateMany(py, file, ['alpha']);
-  assert.strictEqual(r.alpha.ok, true, JSON.stringify(r.alpha));
+  assert.ok(r.ok, JSON.stringify(r));
+  assert.ok(r.symbols.alpha, 'alpha 没命中：' + JSON.stringify(r));
 });
 
 t('同一文件再问 beta（缓存里没有它）也必须命中', () => {
   const r = ast.locateMany(py, file, ['beta']);
-  assert.strictEqual(r.beta.ok, true, '被误判成 not-found：' + JSON.stringify(r.beta));
+  assert.ok(r.symbols.beta, '被误判成 not-found：' + JSON.stringify(r));
 });
 
 t('一次问多个：alpha/beta/gamma 都对，且行号正确', () => {
   const r = ast.locateMany(py, file, ['alpha', 'beta', 'gamma']);
-  assert.strictEqual(r.alpha.line, 1);
-  assert.strictEqual(r.beta.line, 4);
-  assert.strictEqual(r.gamma.line, 7);
+  assert.strictEqual(r.symbols.alpha.line, 1);
+  assert.strictEqual(r.symbols.beta.line, 4);
+  assert.strictEqual(r.symbols.gamma.line, 7);
 });
 
 t('类名不会被当成函数定位（locate 只认 def）', () => {
   const r = ast.locateMany(py, file, ['Delta']);
-  assert.strictEqual(r.Delta.ok, false, '类不该被 locate 命中：' + JSON.stringify(r.Delta));
+  assert.strictEqual(r.symbols.Delta, null, '类不该被 locate 命中：' + JSON.stringify(r));
 });
 
 t('文件改了（mtime 变）之后不再用旧缓存', () => {
   fs.writeFileSync(file, 'def delta():\n    return 3\n');
   const r = ast.locateMany(py, file, ['delta', 'alpha']);
-  assert.strictEqual(r.delta.ok, true, JSON.stringify(r.delta));
-  assert.strictEqual(r.alpha.ok, false, 'alpha 已不存在，不该还在');
+  assert.ok(r.symbols.delta, JSON.stringify(r));
+  assert.strictEqual(r.symbols.alpha, null, 'alpha 已不存在，不该还在');
 });
 
 fs.rmSync(tmp, { recursive: true, force: true });

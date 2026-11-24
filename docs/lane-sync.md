@@ -89,6 +89,33 @@ README 泳道那段也挂上了链接。本轮纯文档，无代码改动；全�
 
 验证：全量 41+30+33+12+16+10+7+12+4+9+2+4+4+3+5+4+DOM 全绿；本机 31/31 + L2 通过。
 
+## 本轮变更（第 66 轮 · 合并 64 条 cap + 两套批处理实现去重）
+
+main 连推 3 个提交（50 → 64 条 cap，status 29.5s→3.3s 收尾，3.5.1 发布）。合并时发现
+**两边各自实现了一套「批量 AST 定位」**，必须收敛成一套，否则缓存/契约互相打架：
+
+| 项 | mac 侧 | win 侧 | 合并结果 |
+|---|---|---|---|
+| 子命令 | `locate-batch`（带 body_line） | `locate-many` | 统一 `locate-batch`，删掉重复实现 |
+| 返回契约 | `{name: {ok,line,…}}` | `{ok, symbols:{name: {...}\|null}}` | **用 win 的契约**（它的 `warmLocate/locOf` 依赖它） |
+| 缓存 | 我的 per-file mtime 缓存 | `LOC_CACHE` + `warmLocate` 预热 | **用 win 的**（`probeAst` 改调 `locOf`） |
+| 索引 | 我的部分目录索引 | 全量 `symbolIndex` | **用 win 的**（语义与老的逐次扫描一致） |
+
+顺带修 `locate-batch` 的契约 bug：找不到符号时原来返回 `{ok:false…}`，他们的调用方当 `null` 用，
+导致整批 AttributeError —— 改成返回 `null`。
+
+另外补 C40 `redact.off` 在 0.21.0 的落点（主锚 `_redact_enabled()` 是 0.21.4+ 才有；
+0.21.0 用模块级 `_REDACT_ENABLED = os.getenv(...)`，直接改常量）。
+
+结果：
+
+```
+本机 0.21.0   caps 64 · applied 56 · pending 0 · drifted 0   L1 18 / L2 14 通过   status 1.75s
+0.21.4 沙箱   caps 64 · applied 57 · drifted 0
+0.21.5 沙箱   caps 64 · applied 57 · drifted 0
+全量          20 组全绿
+```
+
 ## 本轮变更（第 65 轮 · 跟上 50 条 cap；发现 win 写错了 3 个锚点）
 
 main 又前进：`921d1f2 feat: 第二轮补齐宿主拦截点，41 → 50 条 cap (#7)`。合并后本机 `pending 6 drifted 3`。
