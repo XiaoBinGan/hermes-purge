@@ -517,6 +517,40 @@ purge agent uninstall
 HERMES_PURGE_HOME=~/.hermes-purge purge agent install --target="$T"
 ```
 
+**还有一种情况（2026-11-24 实机验证）**：`launchctl print` 显示 `state = not running`、
+`last exit code = -9`（或 `(never exited)`），plist 里 `KeepAlive` 明明写着 true，
+`launchctl print-disabled` 也是 `enabled` —— 但进程被杀掉后**不会自动重启**，甚至 `RunAtLoad`
+也不生效。这台机器（以及锁屏 / 无图形会话 / 受限的企业机）就是这样：launchd 拒绝自行拉起
+LaunchAgent，只有显式 `kickstart` 才有用。
+
+**判据**：拿一个最小任务做对照，如果它也起不来，说明是机器策略而不是我们的 plist：
+
+```bash
+cat > ~/Library/LaunchAgents/com.test.keepalive.probe.plist <<'PL'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.test.keepalive.probe</string>
+  <key>ProgramArguments</key><array><string>/bin/sleep</string><string>300</string></array>
+  <key>RunAtLoad</key><true/><key>KeepAlive</key><true/>
+</dict></plist>
+PL
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.test.keepalive.probe.plist
+launchctl list | grep keepalive.probe      # pid 是 `-` = 这台机器不会自启
+launchctl bootout gui/$(id -u)/com.test.keepalive.probe
+rm ~/Library/LaunchAgents/com.test.keepalive.probe.plist
+```
+
+**修**：
+
+```bash
+purge agent restart     # kickstart -k，进程立刻起来（这一轮新增）
+purge agent status      # 会明确写「已加载但没在跑」并给上面这条命令
+purge serve             # 或者干脆前台跑，别依赖 launchd
+```
+
+`purge agent restart` 也适合放进 shell 启动脚本，绕开机器策略。
+
 另一个常见现象：`launchctl print` 显示 `state = not running`、`last exit code = (never exited)`
 —— 那是只 `bootstrap` 没 `enable`，label 停在 disabled。当前 `lane/mac` 起（v3.1.8 及以后）安装流程是
 `bootout → enable → bootstrap → kickstart`，并会探测 `/api/health` 报「已就绪」。

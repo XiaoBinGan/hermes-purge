@@ -62,7 +62,7 @@ function usageText() {
     '  purge desktop [install|sync|uninstall|status]  在桌面端侧边栏加一个「hermes-purge 状态」入口',
     '  purge parity [--out=F] [--diff=F]  导出/对比两台机器的「效果指纹」（mac ↔ win 对账用）',
     '  purge serve [--port=9123]    起本地控制服务，让面板上的「启用/停用/体检/刷新」按钮可用',
-    '  purge agent [install|status|uninstall]  macOS 开机自启（launchd），让控制服务常驻',
+    '  purge agent [install|status|restart|uninstall]  macOS 开机自启（launchd），让控制服务常驻',
     '  purge stats [--json] [--since=ISO]  观测：轮次、拒答收敛、cap 命中、成本',
     '',
     '  --target=DIR   指定宿主目录（默认自动探测，或 HERMES_HOME / DSH_HOME）',
@@ -706,6 +706,26 @@ function cmdAgent() {
     return;
   }
 
+  if (sub === 'restart' || sub === 'start') {
+    const uid2 = process.getuid ? process.getuid() : 0;
+    const domain2 = 'gui/' + uid2;
+    const label2 = require('../lib/v2/agent').LABEL;
+    if (!fs.existsSync(file)) {
+      console.log('还没装成自启：先跑 purge agent install');
+      process.exitCode = 1;
+      return;
+    }
+    run('launchctl', ['enable', domain2 + '/' + label2]);
+    const k = run('launchctl', ['kickstart', '-k', domain2 + '/' + label2]);
+    console.log(k.status === 0 ? '已请求重启控制服务（kickstart -k）' : '重启失败：' + (k.stderr || '').trim());
+    setTimeout(() => {
+      const l = run('launchctl', ['list']).stdout || '';
+      const row = l.split('\n').find((x) => x.includes(label2));
+      console.log(row ? '  launchctl: ' + row.trim() : '  launchctl: 未加载');
+    }, 1500);
+    return;
+  }
+
   // status
   const list = run('launchctl', ['list']);
   const line = (list.stdout || '').split('\n').find((l) => l.includes(agent.LABEL));
@@ -713,6 +733,10 @@ function cmdAgent() {
   if (line) {
     const [pid, code] = line.trim().split(/\s+/);
     console.log('运行中   pid=' + (pid === '-' ? '（未运行）' : pid) + ' 最后退出码=' + code);
+    if (pid === '-') {
+      console.log('         ↑ 已加载但没在跑。有的机器（锁定的 / 无图形会话）不认 RunAtLoad/KeepAlive，');
+      console.log('           用 purge agent restart 拉起来，或者直接前台跑 purge serve。');
+    }
   } else {
     console.log('运行中   未加载');
   }

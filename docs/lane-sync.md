@@ -13,6 +13,23 @@
 | 0.21.4 沙箱 | `31/31` · L1 14 / L2 14 · revert 逐字节还原 |
 | Windows 实机（0.21.x） | 28/31（C13/C14/C16 缺锚点）—— 由 win 泳道补齐 |
 
+## 本轮变更（第 14 轮 · 服务被 kill 后不会自己起来）
+
+**真机发现**：`kill -9` 掉控制服务后，plist 里 `KeepAlive` 是 true、`print-disabled` 是 enabled，
+但进程**不会自动重启**（`last exit = -9`，`pid = -`）。拿一个 `sleep 300` 的最小 LaunchAgent 做对照，
+它连 `RunAtLoad` 都不生效 —— **是这台机器的策略，不是我们的 plist**（锁屏 / 无图形会话 / 受限机器常见）。
+
+应对：
+
+- 新增 **`purge agent restart`**（`launchctl kickstart -k`），实测能把服务立刻拉起，`/api/health` 回 200
+- `purge agent status` 在「已加载但没在跑」时不再只报 `pid=-`，而是直接说原因并给命令
+- plist 的 `KeepAlive` 改成 dict（`SuccessfulExit: false`）+ `ThrottleInterval: 10`：
+  崩溃/被信号杀会重启，SIGTERM 正常退出不重启
+- `docs/troubleshooting.md` 7.4 补了这条实机结论与「最小对照实验」的判据
+- `test/agent-restart.js` 3 项
+
+验证：全量 41+30+33+12+16+10+7+12+4+9+2+4+4+3+5+4+3+DOM 全绿；本机 31/31。
+
 ## 本轮变更（第 13 轮 · 面板快照过期检测）
 
 上一轮在真机上发现：面板里嵌的快照停在 **3.1.0 / 17:53**，而代码已经是 3.1.6。
