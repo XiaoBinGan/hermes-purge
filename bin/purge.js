@@ -142,6 +142,14 @@ const py = ADAPTER.host.find(TARGET);
 const CAPS = capsLib.buildCaps({ adapter: ADAPTER.id, target: TARGET });
 const ctx = { target: TARGET, py, shimEntries: [], adapter: ADAPTER.id };
 
+// AST 定位预热：按文件批量问一次宿主 python，后面的 probe/apply 全走缓存。
+// 不做这件事，64 条 cap 的 status 要跑 30s（45 次解释器启动 + 45 次全树扫描）。
+try {
+  require('../lib/v2/impls').warmLocate(py, TARGET, CAPS);
+} catch (e) {
+  // 预热失败不影响正确性：probeAst 会退回单符号定位
+}
+
 /* ───────────── 实现选择 ───────────── */
 
 function probeChain(cap) {

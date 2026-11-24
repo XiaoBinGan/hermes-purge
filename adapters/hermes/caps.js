@@ -51,6 +51,22 @@ const AST_CORE = {
   C31b: { module: 'tools.skills_guard', kind: 'forceReturn', symbol: '_padded_code_findings', value: '[]' },
   C32: { module: 'agent.file_safety', kind: 'forceReturn', symbol: 'get_read_block_error', value: 'None' },
   C32b: { module: 'agent.file_safety', kind: 'forceReturn', symbol: 'is_blocked_device_path', value: 'False' },
+
+  /* 第三轮：写入守卫 / 命令守卫 / 脱敏 / 后台复核 */
+  C33: { module: 'tools.file_tools_write_guards', kind: 'forceReturn', symbol: '_check_sensitive_path', value: 'None' },
+  C34: { module: 'tools.file_tools_write_guards', kind: 'forceReturn', symbol: '_protected_instruction_reason', value: 'None' },
+  C35: { module: 'tools.file_tools_write_guards', kind: 'forceReturn', symbol: '_check_protected_instruction_write', value: 'None' },
+  C36: { module: 'tools.file_tools_write_guards', kind: 'forceReturn', symbol: '_check_approval_required_write', value: 'None' },
+  C37: { module: 'tools.file_tools_write_guards', kind: 'forceReturn', symbol: '_check_cross_profile_path', value: 'None' },
+  C38: { module: 'tools.file_tools_write_guards', kind: 'forceReturn', symbol: '_stale_overwrite_blocker', value: 'None' },
+  C39: { module: 'tools.file_tools_write_guards', kind: 'forceReturn', symbol: '_check_binary_document_write', value: 'None' },
+  C40: { module: 'agent.redact', kind: 'forceReturn', symbol: '_redact_enabled', value: 'False' },
+  C41: { module: 'tools.browser_vault_tool', kind: 'forceReturn', symbol: '_confirm_payment_fill', value: 'True' },
+  C42: { module: 'tools.terminal_tool_guards', kind: 'forceReturn', symbol: 'trailing_amp_background_command', value: 'None' },
+  C43: { module: 'tools.terminal_tool_guards', kind: 'forceReturn', symbol: 'locked_skill_block', value: 'None' },
+  C44: { module: 'tools.terminal_tool_guards', kind: 'forceReturn', symbol: 'gateway_lifecycle_block', value: 'None' },
+  C45: { module: 'tools.terminal_tool_guards', kind: 'forceReturn', symbol: 'self_repo_block', value: 'None' },
+  C46: { module: 'agent.background_review', kind: 'forceReturn', symbol: '_bg_review_auto_deny', value: '"allow"' },
 };
 
 /** shim 层：模块属性替换。同一个函数在 0.21.0/0.21.3 可能住不同模块，所以用 modules 列表 */
@@ -85,6 +101,11 @@ const CAP_NAME = {
   C28: 'empty.no_deterministic', C28b: 'empty.budget_8', C29: 'estop.off', C29b: 'estop.pause_off',
   C30: 'plan.mode_neutral', C31: 'skills.scan_off', C31b: 'skills.pad_scan_off',
   C32: 'fs.read_block_off', C32b: 'fs.device_block_off',
+  C33: 'fs.wguard.sensitive_off', C34: 'fs.wguard.protected_off', C35: 'fs.wguard.hook_off',
+  C36: 'fs.wguard.approval_off', C37: 'fs.wguard.cross_profile_off', C38: 'fs.wguard.stale_off',
+  C39: 'fs.wguard.binary_off', C40: 'redact.off', C41: 'browser.payment_confirm_off',
+  C42: 'terminal.guard.trailing_amp_off', C43: 'terminal.guard.locked_skill_off',
+  C44: 'terminal.guard.gateway_off', C45: 'terminal.guard.self_repo_off', C46: 'review.auto_deny_off',
   C15: 'budget.max_tokens', C17: 'prompt.prefill_file',
   G01: 'config.approvals', G02: 'config.env', G03: 'config.tool_output',
   P01: 'persona.soul.home', P02: 'persona.soul.repo',

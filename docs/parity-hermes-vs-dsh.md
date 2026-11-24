@@ -79,6 +79,16 @@ asar 解包目录、anthropic-oauth 分支、inspector 帧预算；Hermes 是单
 | C29 / C29b | `agent/estop.py` | 急停哨兵失效 |
 | C32 / C32b | `agent/file_safety.py` | 读侧围栏失效 |
 
+## 三·补：第三轮在 hermes 源码里挖到的（dsh 没有对应，因为 dsh 没这些层）
+
+| id | 位置 | 行为 |
+|----|------|------|
+| C33–C39 | `tools/file_tools_write_guards.py` | 写入七道检查全放行（敏感路径 / 受保护指令 / 钩子 / 审批 / 跨 profile / 陈旧覆盖 / 二进制文档）|
+| C40 | `agent/redact.py` | 输出脱敏关闭（key/token 不再变 `[redacted]`）|
+| C41 | `tools/browser_vault_tool.py` | 支付卡写入页面自动确认 |
+| C42–C45 | `tools/terminal_tool_guards.py` | `cmd &` / 锁 skill / gateway 生命周期 / 自身 checkout git 全放行 |
+| C46 | `agent/background_review.py` | 后台复核不再自动 deny |
+
 ## 四、待办（下一版候选）
 
 1. `#21` terminal 命令超时 —— hermes `tools/terminal_tool.py` 的 `DEFAULT_TIMEOUT`

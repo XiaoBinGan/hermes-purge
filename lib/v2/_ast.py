@@ -128,6 +128,24 @@ def cmd_locate(path, symbol):
             "col": fn.col_offset, "end_line": fn.end_lineno}
 
 
+def cmd_locate_many(path, symbols):
+    """一次解析多个符号。
+
+    为什么需要：probe 阶段 45 条 AST cap 各起一个 python 进程定位首句，
+    Windows 上单次 ~0.4s，加起来 18s —— purge status 慢到不可用。
+    按文件分组后每文件一次，10 次左右就够。
+    """
+    text = load(path)
+    tree = ast.parse(text, filename=path)
+    out = {}
+    for sym in symbols:
+        fn = find_func(tree, sym)
+        out[sym] = None if fn is None else {
+            "line": fn.lineno, "col": fn.col_offset, "end_line": fn.end_lineno,
+        }
+    return {"ok": True, "file": path, "symbols": out}
+
+
 def main(argv):
     if len(argv) < 3:
         return {"ok": False, "reason": "usage"}
@@ -139,6 +157,8 @@ def main(argv):
             return cmd_set_assign(path, argv[3], " ".join(argv[4:]))
         if cmd == "locate":
             return cmd_locate(path, argv[3])
+        if cmd == "locate-many":
+            return cmd_locate_many(path, argv[3:])
         return {"ok": False, "reason": "unknown-cmd", "cmd": cmd}
     except SyntaxError as e:
         return {"ok": False, "reason": "syntax-error", "detail": str(e), "file": path}
