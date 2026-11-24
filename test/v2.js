@@ -446,15 +446,16 @@ console.log('\ncap 清单');
 
 const caps = capsLib.buildCaps();
 
-t('71 条 cap，id 唯一', () => {
-  assert.strictEqual(caps.length, 71);
-  assert.strictEqual(new Set(caps.map((c) => c.id)).size, 71);
+t('77 条 cap，id 唯一', () => {
+  assert.strictEqual(caps.length, 77);
+  assert.strictEqual(new Set(caps.map((c) => c.id)).size, 77);
 });
 
 t('H 系列（宿主防护层）全部在册，且都有 AST 层', () => {
   const guardCaps = ['C21', 'C22', 'C22b', 'C23', 'C23b', 'C24', 'C25', 'C27',
     'C28', 'C28b', 'C29', 'C29b', 'C30', 'C31', 'C31b', 'C32', 'C32b',
-    'C33', 'C34', 'C35', 'C36', 'C37', 'C38', 'C39', 'C40', 'C41', 'C42', 'C43', 'C44', 'C45', 'C46', 'C47'];
+    'C33', 'C34', 'C35', 'C36', 'C37', 'C38', 'C39', 'C40', 'C41', 'C42', 'C43', 'C44', 'C45', 'C46', 'C47',
+    'C48', 'C49', 'C50', 'C51', 'C53'];
   for (const id of guardCaps) {
     const c = caps.find((x) => x.id === id);
     assert.ok(c, id + ' 缺失');
