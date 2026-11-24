@@ -1,5 +1,38 @@
 # Changelog
 
+## 3.4.0 —— 73 条里还能映射的全补上：41 → 50 条
+
+「为什么不直接补到 73 条」的答案不是偷懒：dsh-purge 的 73 条里有 **30 条左右落在 Hermes 根本不存在的设施上**（cordis preset / web-app 客户端 UI / asar 解包 / anthropic-oauth 身份 / inspector 帧预算 / 会话日志上传），没有文件就没有锚点，凑数等于编。
+
+能映射的这轮全补了，9 条：
+
+| id | 位置 | 之前 → 现在 |
+|----|------|------|
+| C28 | `agent/empty_response_guard.py` | 空回答被判「确定性失败」 | 恒 `False` |
+| C28b | 同上 | 空回答重试预算 3 | `8` |
+| C29 | `agent/estop.py` | ESTOP 哨兵一存在就停 | 恒 `False` |
+| C29b | 同上 | `check_paused` 返回「已暂停」 | 恒 `False` |
+| C30 | `agent/plan_prompt.py` | plan 模式明写「do not start executing in this turn」 | 把任务原样交回，接着干 |
+| C31 | `tools/skills_guard.py` | `_scan_text` 产出 findings（告警源） | 恒 `[]` |
+| C31b | 同上 | `_padded_code_findings` 补扫仍出 findings | 恒 `[]` |
+| C32 | `agent/file_safety.py` | `get_read_block_error` 拒绝读特殊路径 | 恒 `None` |
+| C32b | 同上 | `is_blocked_device_path` 判设备文件禁读 | 恒 `False` |
+
+全部 AST 层落地（改函数首句，抗上游搬迁）。
+
+真机逐项断言：
+
+```
+C28  deterministic_empty → False      C28b empty_retry_budget → 8
+C29  is_engaged → False              C29b check_paused → False
+C30  build_plan_prompt('把 README 补完') → '把 README 补完'
+C31  _scan_text(...) → []             C31b _padded_code_findings → []
+C32  get_read_block_error(SAM) → None C32b is_blocked_device_path('/dev/sda') → False
+```
+
+`npm test` 全绿；`purge status` → **caps 50 · applied 50 · pending 0 · drifted 0**。
+
+dsh 73 条 → Hermes 的映射分类见 `docs/parity-hermes-vs-dsh.md`。
 ## 3.3.0 —— 补上宿主防护层：从 31 条到 41 条（对齐 dsh-purge 的覆盖面）
 
 问题不是「补丁不够多」，是**层次不对**：之前 31 条全压在 审批 / 拒答 / 采样 三条线上，

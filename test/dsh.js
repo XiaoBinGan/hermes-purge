@@ -90,14 +90,14 @@ t('detect(陌生目录) = null，resolve 报错并提示 --adapter', () => {
     assert.ok(msg.includes('--adapter'), '报错没带 --adapter 提示: ' + msg);
     // 库调用不炸：探测不到默认 hermes（1.x 向后兼容）
     assert.strictEqual(adapters.resolve({ target: fake }).id, 'hermes');
-    assert.strictEqual(capsLib.buildCaps({ target: fake }).length, 41);
+    assert.strictEqual(capsLib.buildCaps({ target: fake }).length, 50);
   } finally {
     fs.rmSync(fake, { recursive: true, force: true });
   }
 });
 
-t('buildCaps() 不传参仍是 hermes 41 条（1.x 向后兼容）', () => {
-  assert.strictEqual(capsLib.buildCaps().length, 41);
+t('buildCaps() 不传参仍是 hermes 50 条（1.x 向后兼容）', () => {
+  assert.strictEqual(capsLib.buildCaps().length, 50);
 });
 
 t('buildCaps({adapter:dsh}) = 40 条，id 唯一', () => {
