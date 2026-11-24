@@ -89,6 +89,28 @@ README 泳道那段也挂上了链接。本轮纯文档，无代码改动；全�
 
 验证：全量 41+30+33+12+16+10+7+12+4+9+2+4+4+3+5+4+DOM 全绿；本机 31/31 + L2 通过。
 
+## 本轮变更（第 62 轮 · mac 安装器对齐 win 的三项能力）
+
+Windows 那边刚给 `install.ps1` 补了三件事，mac 侧此前**只在 Windows 成立**，这轮补齐：
+
+| 能力 | ps1（已有） | sh（本轮补上） |
+|---|---|---|
+| 镜像 | `-BaseUrl` | `--base-url=URL` / `HERMES_PURGE_BASE_URL` |
+| PATH | 默认写用户 PATH，`-NoPath` 跳过 | **默认写 shell rc**（`.zshrc`/`.bashrc`/`.profile`，幂等），`--no-path` 跳过 |
+| 下载失败 | 提示换镜像 | `curl --retry 3 --connect-timeout 20` + 提示换镜像 |
+
+真机验证（空 HOME、自定义 bin）：
+
+```
+已安装到 /tmp/sh1/app（版本 latest，无需登录）
+已把 /tmp/sh1/bin 写进 .zshrc（新开终端生效）
+$ /tmp/sh1/bin/purge --version → 3.2.0
+重复装一次 → PATH 已在 .zshrc 里（rc 里仍只有 1 行）
+--no-path   → rc 不动，只提示手动加
+```
+
+`test/install-sh.js` 5 项（三条静态对齐 + 真跑幂等 + `--no-path` 不碰 rc）；全量 19 组全绿。
+
 ## 本轮变更（第 56 轮 · 同步 win 侧 3.1.7~3.2.0）
 
 **之前巡检判据错了**：我一直看 `origin/main..origin/lane/win`（那条分支停在 1cce452），

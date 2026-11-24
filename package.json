@@ -52,7 +52,7 @@
     "apply": "node bin/hermes-purge.js --apply",
     "verify": "node bin/hermes-purge.js --verify",
     "revert": "node bin/hermes-purge.js --revert",
-    "test": "node test/smoke.js && node test/v2.js && node test/dsh.js && node test/setup.js && node test/bench.js && node test/plugin.js && node test/control.js && node test/desktop.js && node test/desktop-dom.js && node test/parity.js && node test/conf-yaml.js && node test/sentinel.js && node test/agent.js && node test/panel-sync.js && node test/parity-layers.js && node test/ast-batch.js && node test/panel-stale.js && node test/agent-restart.js",
+    "test": "node test/smoke.js && node test/v2.js && node test/dsh.js && node test/setup.js && node test/bench.js && node test/plugin.js && node test/control.js && node test/desktop.js && node test/desktop-dom.js && node test/parity.js && node test/conf-yaml.js && node test/sentinel.js && node test/agent.js && node test/panel-sync.js && node test/parity-layers.js && node test/ast-batch.js && node test/panel-stale.js && node test/agent-restart.js && node test/install-sh.js",
     "test:package": "node test/package.js",
     "test:dsh": "node test/dsh.js",
     "v2": "node bin/purge.js",
@@ -73,7 +73,8 @@
     "test:panel-stale": "node test/panel-stale.js",
     "test:agent-restart": "node test/agent-restart.js",
     "test:win": "powershell -NoProfile -ExecutionPolicy Bypass -File test/win/run-smoke.ps1",
-    "test:engine": "powershell -NoProfile -ExecutionPolicy Bypass -File test/win/run-engine.ps1"
+    "test:engine": "powershell -NoProfile -ExecutionPolicy Bypass -File test/win/run-engine.ps1",
+    "test:install": "node test/install-sh.js"
   },
   "engines": {
     "node": ">=18"
