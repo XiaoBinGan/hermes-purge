@@ -1,5 +1,81 @@
 # Changelog
 
+## 3.6.1 —— 认出「身份回绝」：模型不拒任务、只拒框架（真机复现并修）
+
+第四轮改完配置做端到端自检时，`hp "用 python 写一个快速排序"` 直接吐了一段英文立场声明
+（自称 Claude、不接受按框架跑，400+ 字、没有代码围栏）。旧 judge 只认中文拒答词和
+`I can't` 那类，长度过 200 就按「够长 = 成功」放行 —— **重采样一次都没发生**。
+
+修法：新增 `IDENTITY_REFUSAL` 判定 —— 不分语言、不看开头，命中且**无代码围栏**即判 `refused`；
+带围栏的不算（那是给了产物再表态）。刻意不塞进 `REFUSAL_HEAD`：头锚会误杀「先给代码再表态」的答案。
+
+真机验证：
+
+```
+第 1 次… 被拒，重试
+第 2 次… 成功
+```python
+import random
+def quicksort(arr, lo=0, hi=None):
+    ...
+```
+```
+
+新增 5 个用例：英文身份回绝（code / text）、中文身份回绝、身份回绝 + 代码围栏不算拒答、
+正经英文说明里提到 Anthropic 不算回绝。
+## 3.6.0 —— 第四轮挖到配置层：64 → 71 条（终端/循环护栏/委派/压缩上限）
+
+这轮挖的不是函数而是**宿主自己写死的默认值** —— `hermes_cli/config_defaults.py` 里那一大片。
+它们比代码里的 guard 更隐蔽：看起来像「可配项」，但装出来的 config.yaml 是默认值，从没人动过。
+
+| id | 键 | 默认 → 现值 | 为什么疼 |
+|----|------|------|------|
+| G04 | `terminal.timeout` / `lifetime_seconds` | 180s → 3600s / 300s → 86400s | 构建、训练、大仓 git 全在 3 分钟被砍 |
+| G05 | `tool_loop_guardrails.hard_stop_enabled` / `warnings_enabled` | true → false | 同一工具失败 4 次就硬停整轮，换思路重试都不给 |
+| G06 | `context_file_max_chars` / `browser.inactivity_timeout` | 2 万字 → 20 万字 / 120s → 3600s | AGENTS.md 长文档被腰斩（和 C21 放开的「不进提示词」是两回事）|
+| G07 | `delegation.max_iterations` / `max_spawn_depth` / `child_timeout_seconds` / `max_summary_chars` | 250→2000 / 1→6 / 900→0 / 24000→0 | 子代理跑几步就超预算、深度写死 1、900 秒到点杀、结果摘要被截 |
+| G08 | `compression.threshold` / `target_ratio` / `protect_last_n` | 0.50→0.95 / 0.20→0.60 / 20→400 | 上下文用到一半就摘要，原文变摘要 = 细节丢失 |
+| G09 | `updates.check` | true → false | 被动版本检查（显式 `hermes update --check` 不受影响）|
+| C47 | `_foreground_background_guidance` | 返回劝导文本 → `None` | 终端工具把「看起来常驻」的命令改判成前台拒绝，误伤 build / 全量测试 |
+
+### 新实现：通用 `yamlSet`
+
+这些限制全是 `section.key: value` 形状，为每条写一个 kind 不划算。新增一个通用实现：
+
+```js
+{ id: 'G07', layer: 'config', kind: 'yamlSet',
+  sets: [
+    { key: 'delegation.max_iterations', value: 2000 },              // 数值：>= 即满足
+    { key: 'delegation.child_timeout_seconds', value: 0, mode: 'eq' } // 布尔/零值：全等
+  ] }
+```
+
+缺键补进段内、缺段整段补、顶层标量键写单行、重复 apply 不叠标记。
+
+### 踩到的坑（已修 + 已加回归）
+
+`context_file_max_chars` 是**顶层键**（没有 section），第一版 `yamlSet` 把它写成：
+
+```yaml
+context_file_max_chars:
+  null: 200000  # [hermes-purge]
+```
+
+YAML 里这是「值为 None 的 key」，而且这份脏块在文件末尾会**覆盖掉**前面正确的 200000（last-wins）。
+现在顶层键走独立分支写单行，回归用例断言「只出现一次、不出现 `null:`」。
+
+### 验证
+
+宿主自己的解析器读回来（不是看文本）：
+
+```
+terminal.timeout = 3600        tool_loop_guardrails.hard_stop = False
+context_file_max_chars = 200000 delegation.max_spawn_depth = 6
+compression.threshold = 0.95    updates.check = False
+tool_output = {4000000, 20000, 20000}
+```
+
+`purge status` → **caps 71 · applied 71 · pending 0 · drifted 0**；`verify --level=2` L1 29 项 / L2 14 项通过；`npm test` 全绿。
 ## 3.5.0 —— 挖穿宿主剩余拦截点：50 → 64 条（顺带把 status 从 29.5s 修到 3.3s）
 
 第三轮不再靠「对着 dsh 的清单找」，而是直接在 Hermes 源码里搜「会拦住或改写行为」的函数。找到三大块：

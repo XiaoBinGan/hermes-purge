@@ -67,6 +67,7 @@ const AST_CORE = {
   C44: { module: 'tools.terminal_tool_guards', kind: 'forceReturn', symbol: 'gateway_lifecycle_block', value: 'None' },
   C45: { module: 'tools.terminal_tool_guards', kind: 'forceReturn', symbol: 'self_repo_block', value: 'None' },
   C46: { module: 'agent.background_review', kind: 'forceReturn', symbol: '_bg_review_auto_deny', value: '"allow"' },
+  C47: { module: 'tools.terminal_tool_guards', kind: 'forceReturn', symbol: '_foreground_background_guidance', value: 'None' },
 };
 
 /** shim 层：模块属性替换。同一个函数在 0.21.0/0.21.3 可能住不同模块，所以用 modules 列表 */
@@ -106,6 +107,9 @@ const CAP_NAME = {
   C39: 'fs.wguard.binary_off', C40: 'redact.off', C41: 'browser.payment_confirm_off',
   C42: 'terminal.guard.trailing_amp_off', C43: 'terminal.guard.locked_skill_off',
   C44: 'terminal.guard.gateway_off', C45: 'terminal.guard.self_repo_off', C46: 'review.auto_deny_off',
+  C47: 'terminal.guard.foreground_nudge_off',
+  G04: 'config.terminal_budget', G05: 'config.loop_guardrails_off', G06: 'config.context_file_cap',
+  G07: 'config.delegation_budget', G08: 'config.compression_deferred', G09: 'config.update_check_off',
   C15: 'budget.max_tokens', C17: 'prompt.prefill_file',
   G01: 'config.approvals', G02: 'config.env', G03: 'config.tool_output',
   P01: 'persona.soul.home', P02: 'persona.soul.repo',
