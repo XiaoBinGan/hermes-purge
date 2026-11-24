@@ -89,6 +89,24 @@ README 泳道那段也挂上了链接。本轮纯文档，无代码改动；全�
 
 验证：全量 41+30+33+12+16+10+7+12+4+9+2+4+4+3+5+4+DOM 全绿；本机 31/31 + L2 通过。
 
+## 本轮变更（第 56 轮 · 同步 win 侧 3.1.7~3.2.0）
+
+**之前巡检判据错了**：我一直看 `origin/main..origin/lane/win`（那条分支停在 1cce452），
+而 win 侧实际走的是 `lane/win-merge` → `main`。结果 main 上有 8 个提交我完全没看到。
+
+已把 `origin/main` 合进 `lane/mac`（`92d8dd0`）。冲突两处，都按「两边都保留」解决：
+
+- `lib/v2/ast.js` 导出：mac 的 `locateMany/clearCache` + win 的 `runHelper` 并集
+- `package.json` scripts：mac 6 条 + win 2 条（`test:win` / `test:engine`）全部保留
+
+合并进来的 win 侧内容：`install.ps1` 自举 TLS1.2/curl 兜底/`-BaseUrl` 镜像、默认写用户 PATH
+（`-NoPath` 跳过）、桌面端首次启动免责声明、**修 `desktop sync` 丢 token**、approvals 断言不依赖键顺序。
+
+合并后验证：全量 18 组全绿、本机 31/31、`verify --level=2` 通过。
+
+**巡检判据已改**：现在看 `git rev-list --count origin/lane/mac..origin/main`
+（>0 = 对方又前进了，要合并），而不是只看 `lane/win`。当前：落后 0 / 领先 18。
+
 ## 最近巡检（滚动更新，不逐轮追加）
 
 > 约定：巡检全绿且没有任何变化时**不再提交**（避免每 10 分钟一条文档 commit）；
