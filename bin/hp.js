@@ -94,9 +94,27 @@ const DASH = process.env.HERMES_DASH || 'http://127.0.0.1:9119';
   // gateway 据此挂 {project, desktop_ui} 工具集，与桌面窗口内跑的完全一致。
   const source = flags.desktop ? 'desktop' : undefined;
 
+  // 通道优先级：dashboard（宿主全套补丁）> hermes -z（shim 加载，C18 重采样仍生效）> 直连。
+  // 直连只把 payload 当两条假消息发出去：拒答重采样 / 温度 / prefill 全都不在。
+  // Windows 上没起 dashboard 时以前静默落到这一档，表现成「怎么老是拒绝」。
+  let useBin = false;
+  if (!useDash && !flags.api) {
+    try {
+      const bin = core.resolveHermesBin(root);
+      useBin = !!(bin && require('fs').existsSync(bin));
+    } catch (e) { useBin = false; }
+  }
+
   const call = useDash
     ? (t) => ch.viaDash({ base: DASH, source, ...t })
-    : (t) => ch.viaApi({ root, ...t });
+    : useBin
+      ? async (t) => ch.viaHermesBin({ root, ...t })
+      : (t) => ch.viaApi({ root, ...t });
+
+  const chanName = useDash ? 'dashboard' : useBin ? 'hermes -z' : '直连';
+  if (!useDash && !useBin && !flags.quiet) {
+    process.stderr.write('[直连] 拒答重采样/温度/prefill 未生效：先起 hermes dashboard，或去掉 --api\n');
+  }
 
   // 直连通道先验一次配置：配置错是环境问题，不是模型拒绝。
   // 以前它被 catch 吞掉，tries 跑完打印「这一类它不做」—— 会把路径错报成拒答。
@@ -109,7 +127,7 @@ const DASH = process.env.HERMES_DASH || 'http://127.0.0.1:9119';
     }
   }
 
-  if (flags.show) process.stderr.write(`[${lang}/${mode} · ${useDash ? 'dashboard' : 'api'} · 最多 ${tries} 次]\n`);
+  if (flags.show) process.stderr.write(`[${lang}/${mode} · ${chanName} · 最多 ${tries} 次]\n`);
 
   let best = '';
 

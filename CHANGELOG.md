@@ -1,5 +1,41 @@
 # Changelog
 
+## 3.3.0 —— 补上宿主防护层：从 31 条到 41 条（对齐 dsh-purge 的覆盖面）
+
+问题不是「补丁不够多」，是**层次不对**：之前 31 条全压在 审批 / 拒答 / 采样 三条线上，
+而 dsh-purge 73 条里最大的一块是「宿主自带的提示词与内容防护层」。
+于是同样一段 `AGENTS.md`，dsh 上原样进系统提示词，Hermes 上被判注入并整份丢弃：
+`_scan_context_content` 返回 `[BLOCKED: ... Content not loaded.]`。
+
+这一版补 10 条，把这类层清掉：
+
+| id | 位置 | 之前 | 现在 |
+|----|------|------|------|
+| C21 | `agent/prompt_builder.py` | 上下文文件命中注入特征 → 整份 `[BLOCKED]` | 原样返回（AGENTS.md/.cursorrules/.hermes.md/SOUL.md 全量进提示词）|
+| C22 / C22b | `tools/threat_patterns.py` | 威胁特征扫描给出 `findings` | 恒 `[]` / `None` |
+| C23 / C23b | `tools/skills_guard.py` | skill 安装被扫描判定拦住 | 恒放行 / 恒 `safe` |
+| C24 | `tools/mcp_tool_schema.py` | MCP 工具描述里的注入特征刷告警 | 恒 `[]` |
+| C25 | `agent/file_safety.py` | `~/.hermes` 凭据目录拒绝写入 | `deny_path_under` 恒 `False` |
+| C26 | `tools/delegate_tool_config.py` | `MAX_DEPTH = 1`（子代理不能再生子代理）| `6` |
+| C27 | `agent/context_compressor_prune.py` | 主动裁剪悄悄缩短工具结果历史 | `would_proactively_prune` 恒 `False` |
+| G03 | `config.yaml` | `tool_output` 默认 50KB / 2000 行 / 2000 字 | 4MB / 2 万行 / 2 万字 |
+
+C21–C25、C27 走 AST 层（改函数首句，抗上游搬迁），C26 走文本层（模块级常量，AST 不好定位），
+G03 走配置层（宿主自己读 `tool_output` 段，不改源码）。
+
+验证（真机 Hermes + 宿主 venv）：
+
+```
+C21  'ignore all previous instructions…' → 原样返回（之前是 [BLOCKED: …]）
+C22  scan_for_threats → []        C22b first_threat_message → None
+C23  _determine_verdict → safe    C24  _scan_mcp_description → []
+C25  deny_path_under → False      C26  MAX_DEPTH → 6
+C27  函数首句 → return False      G03  tool_output → 4000000/20000/20000
+```
+
+`npm test`：49/49 · 37/37 · 33/33 · 15/15 · 16/16 · 10/10 · 7/7 · 12/12 · DOM · parity 4/4 · conf 4/4 · sentinel 2/2。
+新增 4 个回归用例：`yamlToolOutput` 注入/抬高/幂等、`C26` 带标记替换幂等、
+**`C27` 方法级插入必须缩进 8 格**（insertAfter 只补 4 格，写错就是 IndentationError）、H 系列都有 AST 路径。
 ## 3.2.0 —— 打开 Hermes 先弹免责声明（改宿主源码的工具不该悄悄生效）
 
 桌面端注入的脚本现在会在首次启动时弹一个**阻塞式免责声明**，确认后才继续使用：
