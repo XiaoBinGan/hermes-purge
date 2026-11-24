@@ -89,6 +89,49 @@ README 泳道那段也挂上了链接。本轮纯文档，无代码改动；全�
 
 验证：全量 41+30+33+12+16+10+7+12+4+9+2+4+4+3+5+4+DOM 全绿；本机 31/31 + L2 通过。
 
+## 本轮变更（第 65 轮 · 跟上 50 条 cap；发现 win 写错了 3 个锚点）
+
+main 又前进：`921d1f2 feat: 第二轮补齐宿主拦截点，41 → 50 条 cap (#7)`。合并后本机 `pending 6 drifted 3`。
+
+**逐条查下来，C31 / C31b / C32b 的锚点在任何 0.21.x 里都不存在**：
+
+```
+grep -rl "def _scan_text"            0.21.0 / 0.21.4 / 0.21.5 / 0.21.6 / 0.21.7 → 全部 0 命中
+grep -rl "def _padded_code_findings" → 全部 0 命中
+grep -rl "def is_blocked_device_path" → 全部 0 命中
+```
+
+即主锚写的是上游根本不存在的函数名（真正的扫描入口是 `scan_file` / `scan_skill`，
+读侧拒绝读是 `get_read_block_error`）。这三条在**任何**宿主上都不可能生效。
+
+mac 侧按真实落点补变体（`lib/anchors/hermes-0.21.0-addendum.js`）：
+
+| cap | 真实落点 | 写法 |
+|---|---|---|
+| C31 | `tools/skills_guard.py: scan_file()` | `return []` |
+| C31b | `tools/skills_guard.py: scan_skill()` | 返回空 `ScanResult(skill_path.name, source, "community", "safe", [], "")` |
+| C32b | `agent/file_safety.py: get_read_block_error()` | `return None` |
+
+运行时验证过（不是只看代码）：`scan_file → []`、`scan_skill → ScanResult`、`py_compile` 通过。
+
+另外把「版本缺口」判定改成**兜底**（原来放在循环前，会把 0.0.0 占位版本的 rc 树误判）：
+
+```
+先跑所有实现；都没命中时：
+  有 :missing            → unsupported（文件不存在）
+  否则 hostVersion < since → unsupported（版本太老）
+  否则                    → drifted（真漂移）
+```
+
+结果：
+
+```
+本机 0.21.0   caps 50 · applied 48 · drifted 0   L1 16 / L2 14 通过
+0.21.4 沙箱   caps 50 · applied 49 · drifted 0
+0.21.5 沙箱   caps 50 · applied 49 · drifted 0
+全量          20 组全绿（dsh 33 项、v2 37 项均未受影响）
+```
+
 ## 本轮变更（第 64 轮 · 跟上 41 条 cap，并区分「版本缺口」与「漂移」）
 
 新判据生效第一轮就抓到 main 前进：`60bc97c feat: 补上宿主防护层，31 → 41 条 cap`。

@@ -31,7 +31,7 @@ t('--out 产出稳定 JSON：只有 id/cap/status/impl，不含本机路径', ()
   assert.strictEqual(r.status, 0, r.stderr);
   const j = JSON.parse(fs.readFileSync(out, 'utf8'));
   assert.strictEqual(j.schema, 2);   // schema 2 = mac 侧加了 layers 汇总
-  // cap 数量由补丁表决定（win 侧刚把覆盖面从 31 扩到 41），这里用清单长度而不是硬编码
+  // cap 数量由补丁表决定（两个泳道都在扩：31 → 41 → 50），这里用清单长度而不是硬编码
   assert.strictEqual(j.caps.length, require('../lib/patches').PATCHES.length);
   assert.ok(j.summary && typeof j.summary.applied === 'number');
   for (const c of j.caps) {

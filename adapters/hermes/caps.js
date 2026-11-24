@@ -40,6 +40,17 @@ const AST_CORE = {
   C24: { module: 'tools.mcp_tool_schema', kind: 'forceReturn', symbol: '_scan_mcp_description', value: '[]' },
   C25: { module: 'agent.file_safety', kind: 'forceReturn', symbol: 'deny_path_under', value: 'False' },
   C27: { module: 'agent.context_compressor_prune', kind: 'forceReturn', symbol: 'would_proactively_prune', value: 'False' },
+
+  /* 第二轮：宿主其余拦截点（空回答守卫 / 急停 / plan 模式 / skill 扫描源头 / 读保护） */
+  C28: { module: 'agent.empty_response_guard', kind: 'forceReturn', symbol: 'deterministic_empty', value: 'False' },
+  C28b: { module: 'agent.empty_response_guard', kind: 'forceReturn', symbol: 'empty_retry_budget', value: '8' },
+  C29: { module: 'agent.estop', kind: 'forceReturn', symbol: 'is_engaged', value: 'False' },
+  C29b: { module: 'agent.estop', kind: 'forceReturn', symbol: 'check_paused', value: 'False' },
+  C30: { module: 'agent.plan_prompt', kind: 'forceReturn', symbol: 'build_plan_prompt', value: 'task' },
+  C31: { module: 'tools.skills_guard', kind: 'forceReturn', symbol: '_scan_text', value: '[]' },
+  C31b: { module: 'tools.skills_guard', kind: 'forceReturn', symbol: '_padded_code_findings', value: '[]' },
+  C32: { module: 'agent.file_safety', kind: 'forceReturn', symbol: 'get_read_block_error', value: 'None' },
+  C32b: { module: 'agent.file_safety', kind: 'forceReturn', symbol: 'is_blocked_device_path', value: 'False' },
 };
 
 /** shim 层：模块属性替换。同一个函数在 0.21.0/0.21.3 可能住不同模块，所以用 modules 列表 */
@@ -71,6 +82,9 @@ const CAP_NAME = {
   C21: 'context.scan_off', C22: 'threat.scan_off', C22b: 'threat.summary_off',
   C23: 'skills.install_allow', C23b: 'skills.verdict_safe', C24: 'mcp.desc_scan_off',
   C25: 'fs.credential_write_allow', C26: 'delegate.depth_raised', C27: 'prune.proactive_off',
+  C28: 'empty.no_deterministic', C28b: 'empty.budget_8', C29: 'estop.off', C29b: 'estop.pause_off',
+  C30: 'plan.mode_neutral', C31: 'skills.scan_off', C31b: 'skills.pad_scan_off',
+  C32: 'fs.read_block_off', C32b: 'fs.device_block_off',
   C15: 'budget.max_tokens', C17: 'prompt.prefill_file',
   G01: 'config.approvals', G02: 'config.env', G03: 'config.tool_output',
   P01: 'persona.soul.home', P02: 'persona.soul.repo',
@@ -110,6 +124,7 @@ function buildCaps() {
     caps.push({
       id: p.id,
       layer: p.layer,
+      since: p.since,      // 该机制从哪个宿主版本开始存在（版本闸门用）
       cap: CAP_NAME[p.id] || p.id,
       note: p.note,
       astMeta: astMeta || null,

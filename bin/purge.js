@@ -145,6 +145,34 @@ const ctx = { target: TARGET, py, shimEntries: [], adapter: ADAPTER.id };
 
 /* ───────────── 实现选择 ───────────── */
 
+/* 宿主版本（用于判断「这条 cap 要求的机制在这个版本里有没有」） */
+function hostVersion() {
+  try {
+    const pj = fs.readFileSync(path.join(TARGET, 'pyproject.toml'), 'utf8');
+    const m = pj.match(/^version\s*=\s*["']([0-9][^"']*)["']/m);
+    if (m) return m[1];
+  } catch (e) { /* 继续 */ }
+  try {
+    const hc = fs.readFileSync(path.join(TARGET, 'hermes_constants.py'), 'utf8');
+    const m = hc.match(/__version__\s*=\s*["']([0-9][^"']*)["']/);
+    if (m) return m[1];
+  } catch (e) { /* 继续 */ }
+  return null;
+}
+
+const HOST_VER = hostVersion();
+
+function verLt(a, b) {
+  const pa = String(a).split('.').map(Number);
+  const pb = String(b).split('.').map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const x = pa[i] || 0;
+    const y = pb[i] || 0;
+    if (x !== y) return x < y;
+  }
+  return false;
+}
+
 function probeChain(cap) {
   const tried = [];
   const only = args.impl ? String(args.impl) : null;
@@ -179,6 +207,15 @@ function probeChain(cap) {
     && numMissing > 0;
   if (onlyGaps) {
     return { impl: null, status: 'unsupported', detail: '本机宿主没有该机制所在文件（版本较老），非漂移', kind: null, tried };
+  }
+  // 排在最后：真的什么都没命中，再看是不是版本太老。
+  // 注意 0.0.0 是上游 rc/archive 树的占位版本，不能拿来判定。
+  const realVer = HOST_VER && HOST_VER !== '0.0.0' ? HOST_VER : null;
+  if (ctx.adapter === 'hermes' && cap && cap.since && realVer && verLt(realVer, cap.since)) {
+    return {
+      impl: null, status: 'unsupported', kind: null, tried,
+      detail: '宿主 ' + realVer + ' 没有该机制（需要 ≥' + cap.since + '），非漂移',
+    };
   }
   return { impl: null, status: 'drifted', detail: '所有实现都不可用', kind: null, tried };
 }
