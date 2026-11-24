@@ -18,11 +18,16 @@ param(
   [string]$Bin  = (Join-Path $env:LOCALAPPDATA 'hermes-purge\bin'),
   [string]$Repo = 'https://github.com/XiaoBinGan/hermes-purge.git',
   # 脚本不是从仓库里跑的时候，从 Release 下源码包（公开资产，不需要登录）
-  [string]$Version = 'latest'
+  [string]$Version = 'latest',
+  # 镜像/代理（GitHub 直连不稳时用）：默认官方，可换 https://ghproxy.com/https://github.com/XiaoBinGan/hermes-purge
+  [string]$BaseUrl = 'https://github.com/XiaoBinGan/hermes-purge'
 )
 
 $ErrorActionPreference = 'Stop'
 try { [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch { }
+# Windows PowerShell 5.1 默认还可能走 TLS 1.0；GitHub 只收 1.2+，不设会「基础连接已经关闭」
+try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch { }
+$ProgressPreference = 'SilentlyContinue'
 
 function Say($m)  { Write-Host $m }
 function Warn($m) { Write-Host $m -ForegroundColor Yellow }
@@ -57,15 +62,27 @@ if (Test-Path (Join-Path $Src 'bin\purge.js')) {
   }
 } else {
   # 没有仓库（例如直接下载 install.ps1 跑的）：下 Release 源码包，公开资产，无需登录
-  $gh = 'https://github.com/XiaoBinGan/hermes-purge'
+  $gh = $BaseUrl.TrimEnd('/')
   if ($Version -eq 'latest') { $url = "$gh/releases/latest/download/hermes-purge-src.zip" }
   else { $url = "$gh/releases/download/v$($Version.TrimStart('v'))/hermes-purge-src.zip" }
   $tmpZip = Join-Path ([IO.Path]::GetTempPath()) ("hp-src-" + [Guid]::NewGuid().ToString('N') + ".zip")
   $tmpDir = Join-Path ([IO.Path]::GetTempPath()) ("hp-src-" + [Guid]::NewGuid().ToString('N'))
   Say "下载源码包：$url"
+  $dlErr = $null
   try {
     Invoke-WebRequest $url -OutFile $tmpZip -UseBasicParsing -TimeoutSec 120
-  } catch { Die "下载失败：$url（$($_.Exception.Message)）" }
+  } catch { $dlErr = $_.Exception.Message }
+  if ($dlErr -or -not (Test-Path $tmpZip) -or (Get-Item $tmpZip).Length -eq 0) {
+    # PS 5.1 在某些网络下 IWR 直接断连；退到系统自带的 curl.exe（Win10 1803+ 都有）
+    $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
+    if ($curl) {
+      Say '  IWR 失败，改用 curl.exe 重试'
+      & curl.exe -fsSL --retry 3 --connect-timeout 20 $url -o $tmpZip
+      if ($LASTEXITCODE -ne 0) { Die "下载失败：$url（curl 退出码 $LASTEXITCODE；可用 -BaseUrl 换镜像）" }
+    } else {
+      Die "下载失败：$url（$dlErr；可用 -BaseUrl 换镜像，或手动下载后在本目录跑 ./install.sh）"
+    }
+  }
   Expand-Archive $tmpZip -DestinationPath $tmpDir -Force
   $srcDir = Get-ChildItem $tmpDir -Directory | Where-Object { Test-Path (Join-Path $_.FullName 'bin\purge.js') } | Select-Object -First 1
   if (-not $srcDir) { Die '包结构不对：里面没有 bin/purge.js' }

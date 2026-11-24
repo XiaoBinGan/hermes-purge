@@ -1,5 +1,20 @@
 # Changelog
 
+## 3.1.8 —— install.ps1 自举下载在真实网络下可用（TLS 1.2 / curl 兜底 / -BaseUrl 镜像）
+
+3.1.7 把 Windows 修复进了资产，但在「只下载 install.ps1、仓库不在本机」这条路径上还有个真问题：
+`Invoke-WebRequest` 在 Windows PowerShell 5.1 上默认可能协商 TLS 1.0，GitHub 只收 1.2+，
+表现就是 `基础连接已经关闭: 发送时发生错误` —— 用户看到的是「下载源码包失败」。
+
+- 启动即设 `[Net.ServicePointManager]::SecurityProtocol = Tls12`，并关掉进度条（大文件快很多）
+- IWR 失败/拿到空文件时自动退到系统自带的 `curl.exe -fsSL --retry 3`
+- 新增 `-BaseUrl`：直连 GitHub 不稳时可换镜像，例如
+  `-BaseUrl https://ghproxy.com/https://github.com/XiaoBinGan/hermes-purge`
+- 失败信息里直接给「换镜像 / 手动下载」的下一步，不再只抛异常
+
+本地用 HTTP 镜像实测：`install.ps1 -BaseUrl http://127.0.0.1:8899` → 下载 → 解压 → 装到
+`…\中文 自举装\` → `purge --version = 3.1.8`，`%~dp0` 启动器与路径文件均正常。
+
 ## 3.1.7 —— Windows 安装与运行时修复进主线（重打 Release 资产）
 
 把 `lane/win` 的全部改动合进 `main`，并**重打资产** —— 3.1.6 的 `install.ps1` / `install.sh` 还是旧的：
