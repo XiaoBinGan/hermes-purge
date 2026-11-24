@@ -162,6 +162,23 @@ if (py) {
     assert.strictEqual(probe.status, 'pending', JSON.stringify(probe));
   });
 
+  t('多行签名 + docstring 的函数：改完要判 applied（不能用 def 行 +1）', () => {
+    const root = path.join(tmp, 'multiline');
+    fs.mkdirSync(path.join(root, 'tools'), { recursive: true });
+    const f = path.join(root, 'tools', 'g.py');
+    fs.writeFileSync(f,
+      'def weird(\n    *,\n    a: int,\n) -> str | None:\n    """doc string first."""\n    return "x"\n');
+    const sp = { symbol: 'weird', value: 'None' };
+    const ctx = { py, target: root };
+    assert.strictEqual(impls.probeAst(sp, 'X9', ctx).status, 'pending');
+    impls.applyAst(sp, 'X9', ctx);
+    assert.strictEqual(impls.probeAst(sp, 'X9', ctx).status, 'applied',
+      '多行签名被误判；body_line 没用上？');
+    const body = fs.readFileSync(f, 'utf8');
+    assert.ok(/return None/.test(body), body);
+    assert.ok(/"""doc string first."""/.test(body), '文档串不该被吃掉');
+  });
+
   t('符号不存在时返回 ok:false 而不是抛栈', () => {
     const f = path.join(tmp, 'ast4.py');
     fs.writeFileSync(f, 'x = 1\n');
