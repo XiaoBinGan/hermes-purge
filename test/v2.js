@@ -155,7 +155,7 @@ t('1.x 入口是转发壳：--status/--apply --dry 走 v2（issue 里的「未�
   assert.strictEqual(r.status, 0, r.stderr);
   const j = JSON.parse((r.stdout || '{}').trim());
   assert.strictEqual(j.adapter, 'hermes', '没转发到 v2：' + (r.stdout || '').slice(0, 200));
-  assert.strictEqual(j.rows.length, 78, 'cap 条数不对: ' + j.rows.length);
+  assert.strictEqual(j.rows.length, 79, 'cap 条数不对: ' + j.rows.length);
   const d = spawnSync(process.execPath, [LEGACY, '--apply', '--dry', '--target=' + host], { encoding: 'utf8' });
   assert.strictEqual(d.status, 0, d.stderr);
   assert.ok(/预演|dry/i.test(d.stdout || ''), 'dry 没走 v2：' + (d.stdout || '').slice(0, 200));
@@ -588,9 +588,9 @@ console.log('\ncap 清单');
 
 const caps = capsLib.buildCaps();
 
-t('78 条 cap，id 唯一', () => {
-  assert.strictEqual(caps.length, 78);
-  assert.strictEqual(new Set(caps.map((c) => c.id)).size, 78);
+t('79 条 cap，id 唯一', () => {
+  assert.strictEqual(caps.length, 79);
+  assert.strictEqual(new Set(caps.map((c) => c.id)).size, 79);
 });
 
 t('H 系列（宿主防护层）全部在册，且都有 AST 层', () => {
