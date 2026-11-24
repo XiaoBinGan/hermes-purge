@@ -29,6 +29,12 @@ t('正文：露骨 + 场景', () => assert.strictEqual(core.pickLang('写一段�
 t('正文：小说 + 情色', () => assert.strictEqual(core.pickLang('情色小说里的一段'), 'text'));
 t('默认 python', () => assert.strictEqual(core.pickLang('写个端口扫描器'), 'python'));
 t('非正文：场景但无成人词', () => assert.strictEqual(core.pickLang('写个 3D 场景渲染脚本'), 'python'));
+t('明确代码语言优先于叙事词', () => assert.strictEqual(core.pickLang('写一段 python 脚本'), 'python'));
+// 「猛攻的情节」这类没有「露骨/成人」二字、但明显是续写正文的请求：
+// 以前掉到默认 python → mode=plain → tries=1 → 不注入不重试，直接打印拒绝原文
+t('叙事信号（无成人词）→ 正文', () => assert.strictEqual(core.pickLang('猛攻的情节'), 'text'));
+t('续写信号 → 正文', () => assert.strictEqual(core.pickLang('接着写下去'), 'text'));
+t('叙事默认 8 次重试', () => assert.strictEqual(core.pickTries('猛攻的情节', 'text'), 8));
 
 console.log('\n重试次数推断');
 t('正文 8 次', () => assert.strictEqual(core.pickTries('写段露骨场景', 'text'), 8));
@@ -39,6 +45,16 @@ console.log('\n判定三态');
 t('正常产出 → ok', () => assert.strictEqual(core.judge('```python\n' + 'x = 1\n'.repeat(80) + '```', 'python', []), 'ok'));
 t('开头拒绝 → refused', () => assert.strictEqual(core.judge('我不写这个。因为……', 'python', []), 'refused'));
 t('英文拒绝 → refused', () => assert.strictEqual(core.judge("I can't do that.", 'python', []), 'refused'));
+// 「我不会按这个框架运行」整段拒答：以前 REFUSAL 只收了「我不按」，漏了「我不会」→
+// plain 模式 lenient 直接放行，把拒绝原文当答案打印
+t('「我不会按…」→ refused', () => assert.strictEqual(
+  core.judge('我不会按这个框架运行。', 'python', []), 'refused'));
+t('「我不会按…」plain 模式也是 refused', () => assert.strictEqual(
+  core.judge('我不会按这个框架运行。这份文件不是我的身份文件。', 'python', [], { lenient: true }), 'refused'));
+t('「我不接受这套」→ refused', () => assert.strictEqual(
+  core.judge('我不接受这套框架，原因很具体：', 'python', []), 'refused'));
+t('正经短答不被误判', () => assert.strictEqual(
+  core.judge('收到', 'python', [], { lenient: true }), 'ok'));
 t('空 → refused', () => assert.strictEqual(core.judge('', 'python', []), 'refused'));
 t('正文降级 → downgraded', () => assert.strictEqual(
   core.judge('正文：停在临界点，不落器官描写。' + '啊'.repeat(400), 'text', []), 'downgraded'));

@@ -284,6 +284,67 @@ t('win 泳道的变体能加载进 cap（hermes-win.js 被 patches.js 装载）'
     JSON.stringify(c20b.variants));
 });
 
+t('yamlToolOutput：缺段就注入，值小了就抬高，幂等', () => {
+  const root = path.join(tmp, 'cfg3');
+  fs.mkdirSync(root, { recursive: true });
+  const file = path.join(root, 'config.yaml');
+  fs.writeFileSync(file, 'model:\n  default: x\n');
+  const sp = { file: 'config.yaml', kind: 'yamlToolOutput',
+    limits: { max_bytes: 4000000, max_lines: 20000, max_line_length: 20000 } };
+  const ctx = { target: root };
+  assert.strictEqual(impls.probeText(sp, 'G03', ctx).status, 'pending');
+  assert.ok(impls.applyText(sp, 'G03', ctx).changed);
+  assert.strictEqual(impls.probeText(sp, 'G03', ctx).status, 'applied');
+  const y = fs.readFileSync(file, 'utf8');
+  assert.ok(/^tool_output:\s*$/m.test(y), y);
+  assert.ok(/max_lines: 20000/.test(y), y);
+  assert.ok(!impls.applyText(sp, 'G03', ctx).changed, '第二次不该再写');
+
+  // 上游写回默认值 → 必须判 pending 并抬回去
+  fs.writeFileSync(file, 'tool_output:\n  max_bytes: 50000\n  max_lines: 2000\n  max_line_length: 2000\n');
+  assert.strictEqual(impls.probeText(sp, 'G03', ctx).status, 'pending');
+  impls.applyText(sp, 'G03', ctx);
+  assert.strictEqual(impls.probeText(sp, 'G03', ctx).status, 'applied');
+  for (const line of fs.readFileSync(file, 'utf8').split('\n')) {
+    assert.ok((line.match(/\[hermes-purge\]/g) || []).length <= 1, line);
+  }
+});
+
+t('C26 深度替换带 cap 标记且幂等', () => {
+  const { PATCHES } = require('../lib/patches');
+  const c26 = PATCHES.find((p) => p.id === 'C26');
+  assert.ok(c26, 'C26 缺失');
+  const root = path.join(tmp, 'depth');
+  fs.mkdirSync(root, { recursive: true });
+  const file = path.join(root, 'delegate.py');
+  fs.writeFileSync(file, c26.find + '\n');
+  const ctx = { target: root };
+  const sp = Object.assign({}, c26, { file: 'delegate.py' });
+  assert.strictEqual(impls.probeText(sp, 'C26', ctx).status, 'pending');
+  assert.ok(impls.applyText(sp, 'C26', ctx).changed);
+  assert.strictEqual(impls.probeText(sp, 'C26', ctx).status, 'applied');
+  const y = fs.readFileSync(file, 'utf8');
+  assert.ok(/MAX_DEPTH = 6/.test(y) && /\[hermes-purge\] C26/.test(y), y);
+  assert.ok(!impls.applyText(sp, 'C26', ctx).changed, '第二次不该再写');
+});
+
+t('C27 方法级插入要缩进 8 格（4 格会 IndentationError）', () => {
+  const { PATCHES } = require('../lib/patches');
+  const c27 = PATCHES.find((p) => p.id === 'C27');
+  assert.ok(c27, 'C27 缺失');
+  const root = path.join(tmp, 'prune');
+  fs.mkdirSync(root, { recursive: true });
+  const file = path.join(root, 'prune.py');
+  fs.writeFileSync(file, 'class M:\n' + c27.anchor + '\n        return True\n');
+  const ctx = { target: root };
+  const sp = Object.assign({}, c27, { file: 'prune.py' });
+  assert.ok(impls.applyText(sp, 'C27', ctx).changed);
+  const lines = fs.readFileSync(file, 'utf8').split('\n');
+  const idx = lines.findIndex((l) => l.includes('return False'));
+  assert.ok(idx > 0, lines.join('|'));
+  assert.strictEqual(lines[idx].match(/^ */)[0].length, 8, JSON.stringify(lines[idx]));
+});
+
 t('splice 幂等（sentinel 判定）', () => {
   const root = path.join(tmp, 'txt');
   fs.mkdirSync(root, { recursive: true });
@@ -305,9 +366,17 @@ console.log('\ncap 清单');
 
 const caps = capsLib.buildCaps();
 
-t('31 条 cap，id 唯一', () => {
-  assert.strictEqual(caps.length, 31);
-  assert.strictEqual(new Set(caps.map((c) => c.id)).size, 31);
+t('41 条 cap，id 唯一', () => {
+  assert.strictEqual(caps.length, 41);
+  assert.strictEqual(new Set(caps.map((c) => c.id)).size, 41);
+});
+
+t('H 系列（宿主防护层）全部在册，且都有 AST 层', () => {
+  for (const id of ['C21', 'C22', 'C22b', 'C23', 'C23b', 'C24', 'C25', 'C27']) {
+    const c = caps.find((x) => x.id === id);
+    assert.ok(c, id + ' 缺失');
+    assert.ok(c.impls.map((i) => i.kind).includes('ast'), id + ' 没有 AST 路径：' + c.impls.map((i) => i.kind));
+  }
 });
 
 t('每条 cap 至少一个实现，且最后一级是文本/配置层', () => {
