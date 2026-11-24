@@ -124,8 +124,13 @@ def cmd_locate(path, symbol):
     fn = find_func(tree, symbol)
     if fn is None:
         return {"ok": False, "reason": "symbol-not-found", "symbol": symbol}
+    # body_line 是「函数体第一条语句」的行号。
+    # probe 要拿它判断「首句是不是我们已经插进去的 return」，用 fn.lineno+1 是错的：
+    # 多行签名（def f(\n *,\n a,\n) -> X:）和带 docstring 的函数都会看错行，
+    # 结果就是改成功了反而报 pending（C34 / C44 / C45 踩过）。
+    body_line = fn.body[0].lineno if fn.body else None
     return {"ok": True, "symbol": symbol, "line": fn.lineno,
-            "col": fn.col_offset, "end_line": fn.end_lineno}
+            "col": fn.col_offset, "end_line": fn.end_lineno, "body_line": body_line}
 
 
 def cmd_locate_many(path, symbols):
@@ -142,6 +147,7 @@ def cmd_locate_many(path, symbols):
         fn = find_func(tree, sym)
         out[sym] = None if fn is None else {
             "line": fn.lineno, "col": fn.col_offset, "end_line": fn.end_lineno,
+            "body_line": fn.body[0].lineno if fn.body else None,
         }
     return {"ok": True, "file": path, "symbols": out}
 
