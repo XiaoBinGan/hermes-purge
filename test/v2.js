@@ -325,6 +325,45 @@ t('win 泳道的变体能加载进 cap（hermes-win.js 被 patches.js 装载）'
     JSON.stringify(c20b.variants));
 });
 
+t('yamlSet：多键设置 / 下界比较 / 布尔翻转 / 缺段补段 / 幂等', () => {
+  const root = path.join(tmp, 'cfgset');
+  fs.mkdirSync(root, { recursive: true });
+  const file = path.join(root, 'config.yaml');
+  fs.writeFileSync(file,
+    'terminal:\n  backend: local\n  timeout: 180\ncompression:\n  threshold: 0.5\n'
+    + 'tool_loop_guardrails:\n  hard_stop_enabled: true\nupdates:\n  backup_keep: 5\n');
+  const sp = { file: 'config.yaml', kind: 'yamlSet', sets: [
+    { key: 'terminal.timeout', value: 3600 },
+    { key: 'compression.threshold', value: 0.95 },
+    { key: 'tool_loop_guardrails.hard_stop_enabled', value: false, mode: 'eq' },
+    { key: 'updates.check', value: false, mode: 'eq' },
+    { key: 'delegation.max_spawn_depth', value: 6 },
+    { key: 'context_file_max_chars', value: 200000 },
+  ] };
+  const ctx = { target: root };
+  assert.strictEqual(impls.probeText(sp, 'G07', ctx).status, 'pending');
+  assert.ok(impls.applyText(sp, 'G07', ctx).changed);
+  assert.strictEqual(impls.probeText(sp, 'G07', ctx).status, 'applied');
+  const y = fs.readFileSync(file, 'utf8');
+  assert.ok(/^  timeout: 3600/m.test(y), y);
+  assert.ok(/^  threshold: 0.95/m.test(y), y);
+  assert.ok(/^  hard_stop_enabled: false/m.test(y), y);
+  assert.ok(/^  check: false/m.test(y), '缺键要补进已有段:\n' + y);
+  assert.ok(/^delegation:\n  max_spawn_depth: 6/m.test(y), '缺段要整段补:\n' + y);
+  // 顶层标量键（没有 section）绝不能写成 'key:\n  null: x' —— 真机上踩过
+  assert.ok(/^context_file_max_chars: 200000/m.test(y), '顶层键要写成单行:\n' + y);
+  assert.ok(!/^\s+null:/m.test(y), '顶层键写坏了:\n' + y);
+  assert.strictEqual((y.match(/^context_file_max_chars:/gm) || []).length, 1, '顶层键不能重复:\n' + y);
+  // 每个键只允许一个标记，重复 apply 不再写
+  assert.ok(!impls.applyText(sp, 'G07', ctx).changed, '第二次不该再写');
+  for (const line of y.split('\n')) {
+    assert.ok((line.match(/\[hermes-purge\]/g) || []).length <= 1, line);
+  }
+  // 宿主把值写回默认 → 必须判 pending
+  fs.writeFileSync(file, 'terminal:\n  timeout: 180\n');
+  assert.strictEqual(impls.probeText(sp, 'G07', ctx).status, 'pending');
+});
+
 t('yamlToolOutput：缺段就注入，值小了就抬高，幂等', () => {
   const root = path.join(tmp, 'cfg3');
   fs.mkdirSync(root, { recursive: true });
@@ -407,15 +446,15 @@ console.log('\ncap 清单');
 
 const caps = capsLib.buildCaps();
 
-t('64 条 cap，id 唯一', () => {
-  assert.strictEqual(caps.length, 64);
-  assert.strictEqual(new Set(caps.map((c) => c.id)).size, 64);
+t('71 条 cap，id 唯一', () => {
+  assert.strictEqual(caps.length, 71);
+  assert.strictEqual(new Set(caps.map((c) => c.id)).size, 71);
 });
 
 t('H 系列（宿主防护层）全部在册，且都有 AST 层', () => {
   const guardCaps = ['C21', 'C22', 'C22b', 'C23', 'C23b', 'C24', 'C25', 'C27',
     'C28', 'C28b', 'C29', 'C29b', 'C30', 'C31', 'C31b', 'C32', 'C32b',
-    'C33', 'C34', 'C35', 'C36', 'C37', 'C38', 'C39', 'C40', 'C41', 'C42', 'C43', 'C44', 'C45', 'C46'];
+    'C33', 'C34', 'C35', 'C36', 'C37', 'C38', 'C39', 'C40', 'C41', 'C42', 'C43', 'C44', 'C45', 'C46', 'C47'];
   for (const id of guardCaps) {
     const c = caps.find((x) => x.id === id);
     assert.ok(c, id + ' 缺失');

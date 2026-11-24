@@ -1,10 +1,10 @@
 # hermes-purge
 
 **给 Hermes Agent 打「能力层」补丁**：关掉审批/护栏/命令黑名单，换掉提示词人格，
-让模型被拒时自动重采样。64 条能力、四层落地（AST / 运行时 shim / 文本 / 配置）、
+让模型被拒时自动重采样。71 条能力、四层落地（AST / 运行时 shim / 文本 / 配置）、
 改坏了能逐字节回滚。
 
-**一条命令安装，一条命令撤销。** 当前版本 **3.5.1** · 零依赖 · Node ≥18 · macOS + Windows 实测。
+**一条命令安装，一条命令撤销。** 当前版本 **3.6.0** · 零依赖 · Node ≥18 · macOS + Windows 实测。
 
 > 借鉴了 [dsh-purge](https://github.com/YuJunZhiXue/dsh-purge) 的一个判断（「不跟模型讲道理，直接改宿主」），
 > 但引擎、补丁清单、验证方式、CLI 都是为 Hermes 独立写的 —— 没有一行共享代码。逐条对账见下文「我们比它强在哪」。
@@ -126,7 +126,7 @@ purge parity --diff=mac.json     # 在另一台机器上比对，一致返回 0�
 | 配置 | `approvals.mode=off`、`model.max_tokens=16000`、prefill、`.env` |
 | 代码 | 审批门、审批模式、编辑确认、护栏、命令黑名单、系统提示词注入位置 |
 
-64 条能力，每条都带断言；改坏了能逐字节回滚。
+71 条能力，每条都带断言；改坏了能逐字节回滚。
 
 ---
 
@@ -163,7 +163,7 @@ purge parity --diff=mac.json     # 在另一台机器上比对，一致返回 0�
 Hermes Agent 有若干层「不让你做某件事」的机制。这个工具把它们逐层拆掉，
 并额外提供一套执行器，让模型在被拒时自动重试。
 
-**清洗器**：64 条补丁，分四层
+**清洗器**：71 条补丁，分四层
 
 | 层 | 改什么 |
 |----|--------|
@@ -200,7 +200,7 @@ cd hermes-purge
 node bin/hermes-purge.js --status
 ```
 
-会列出 64 条补丁各自是 `applied` / `pending` / `drifted` / `missing`。
+会列出 71 条补丁各自是 `applied` / `pending` / `drifted` / `missing`。
 
 如果显示「找不到 Hermes 安装目录」，用下面任一方式指定：
 
@@ -604,7 +604,7 @@ opener 拼接去重、路径解析、补丁清单完整性。
 
 ---
 
-## 64 条补丁明细
+## 71 条补丁明细
 
 ### 代码层 · 审批与拒答（25 条）
 
@@ -678,7 +678,25 @@ opener 拼接去重、路径解析、补丁清单完整性。
 | C45 | 同上 | `self_repo_block` 恒 `None`（可改自身 checkout）|
 | C46 | `agent/background_review.py` | `_bg_review_auto_deny` 恒 `"allow"`（后台复核不再自动 deny）|
 
-### 配置层（5 条）
+### 代码层 · 终端劝导（1 条）
+
+| id | 文件 | 改动 |
+|----|------|------|
+| C47 | `tools/terminal_tool_guards.py` | `_foreground_background_guidance` 恒 `None`（长跑命令不再被改判成后台）|
+
+### 配置层（11 条）
+
+一个通用实现 `yamlSet` 覆盖多键：`{ key: 'section.key', value, mode }`，数值按下界比较、布尔按等值，
+缺键补进段内、缺段整段补、顶层标量键写单行。
+
+| id | 键 | 默认 → 现值 |
+|----|------|------|
+| G04 | `terminal.timeout` / `terminal.lifetime_seconds` | 180s → 3600s / 300s → 86400s |
+| G05 | `tool_loop_guardrails.hard_stop_enabled` / `warnings_enabled` | true → false（循环护栏软硬停全关）|
+| G06 | `context_file_max_chars` / `browser.inactivity_timeout` | 20000 → 200000 / 120s → 3600s |
+| G07 | `delegation.max_iterations` / `max_spawn_depth` / `child_timeout_seconds` / `max_summary_chars` | 250 → 2000 / 1 → 6 / 900 → 0 / 24000 → 0 |
+| G08 | `compression.threshold` / `target_ratio` / `protect_last_n` | 0.50 → 0.95 / 0.20 → 0.60 / 20 → 400 |
+| G09 | `updates.check` | true → false |
 
 - **C15** `model.max_tokens: 16000` — 推理型模型预算不足时推理吃满 token，
   正文字段返回空，看起来像拒绝
@@ -698,7 +716,7 @@ opener 拼接去重、路径解析、补丁清单完整性。
 
 ## v2：能力层（capability layer）
 
-1.x 是「31 条文本补丁」。v2 把它升级成「64 条能力 + 每条 4 条落地路径」：
+1.x 是「31 条文本补丁」。v2 把它升级成「71 条能力 + 每条 4 条落地路径」：
 
 | 层 | 做法 | 抗什么 |
 |---|---|---|
@@ -771,7 +789,7 @@ lib/v2/caps.js         门面：buildCaps({adapter,target})，缺省探测、探
 lib/v2/impls.js        文本层（宿主无关，两个 adapter 共用）
 lib/v2/conf.js         配置层 conf kind：yamlEntry / yamlTop / jsonSet / jsonAppend / fileWrite
 lib/v2/shim-node.js    Node 宿主 shim：NODE_OPTIONS=--require 预加载 + 模块导出替换
-adapters/hermes/       64 条 cap（原封不动）+ Python AST / site-packages shim / L1-L3
+adapters/hermes/       71 条 cap（原封不动）+ Python AST / site-packages shim / L1-L3
 adapters/dsh/          40 条 cap + conf/text/shim + node --check / 断言 L2
 ```
 
@@ -830,7 +848,7 @@ Windows 语义下的三个必踩坑，都已用 CRLF 树实测修掉：
 | 观测 | 无 | `metrics.jsonl` + `purge stats`：轮次 / 拒答收敛 / 重采样均值 / cap 命中 / tokens 成本（shim 的 turn 钩子每轮写一条） | `purge stats` |
 | 平台 | 未注明 | macOS + Windows 都实测；CRLF 三个坑（AST 插行写坏文件、锚点 LF 匹配不上、venv 双布局）已修并由 CRLF 树闭环验证 | `test/v2.js --e2e <CRLF 树>` |
 | 宿主绑定 | 绑死 DSH | **adapter 注册表**：cap 只描述行为，落地层不认识宿主；Hermes（实测）+ DSH（规格验证）两个 adapter 并存 | `lib/v2/adapters.js` |
-| 规模思路 | 88 条 patch（同一行为常有多种表述） | Hermes 64 条 cap、DSH 40 条 cap（由 88 条按行为收敛），每条带断言；不做条数竞赛 | `purge status` 的 `cap` 列 |
+| 规模思路 | 88 条 patch（同一行为常有多种表述） | Hermes 71 条 cap、DSH 40 条 cap（由 88 条按行为收敛），每条带断言；不做条数竞赛 | `purge status` 的 `cap` 列 |
 
 ### 三条我们刻意做得比它狠的
 
@@ -1005,7 +1023,7 @@ hermes-purge/
 ├── .gitattributes             统一换行
 ├── bin/
 │   ├── hp.js                  一条命令入口（自动判断）
-│   ├── hermes-purge.js        清洗器（64 条补丁）
+│   ├── hermes-purge.js        清洗器（71 条补丁）
 │   ├── hermes-p.js            破甲执行器（直连 / 子进程）
 │   ├── dashboard-chat.js      Dashboard WebSocket 通道
 │   ├── probe.js               效力边界探针
