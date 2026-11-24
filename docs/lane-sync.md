@@ -13,6 +13,22 @@
 | 0.21.4 沙箱 | `31/31` · L1 14 / L2 14 · revert 逐字节还原 |
 | Windows 实机（0.21.x） | 28/31（C13/C14/C16 缺锚点）—— 由 win 泳道补齐 |
 
+## 本轮变更（第 17 轮 · Windows 作业单入库）
+
+之前给 Windows 的指引只在聊天里，落不到仓库。这轮写成 **`docs/win-handoff.md`**（208 行），
+它照着做就能把 C13/C14/C16 补上：
+
+- 0. 对齐代码（merge `origin/lane/mac`，两者改的文件不重叠）
+- 1. 在宿主里找真实落点（`grep 'content": effective_system'` / `prefill_messages`，用 `cat -A` 看清缩进）
+- 2. 检查 `_clone_message_for_send` 是否存在（不存在就换 `dict(pfm)` 并说明）
+- 3. 往 `lib/anchors/hermes-win.js` 写锚点的完整模板 + 三条铁律（缩进必须真实、注释带 cap id、先 `--dry`）
+- 4. 七步验收（status → apply → 31/31 → L1/L2 → 行尾 → revert 逐字节 → 单测）
+- 5. 与 mac 对账（`purge parity --out=win.json` ↔ `--diff`）
+- 6. 提交 + `scripts/lane-guard.sh --lane=lane/win`
+- 报告格式 + 「遇到这三种现象看 troubleshooting 第 7 节」的对照表
+
+README 泳道那段也挂上了链接。本轮纯文档，无代码改动；全量测试仍全绿，本机 31/31。
+
 ## 本轮变更（第 14 轮 · 服务被 kill 后不会自己起来）
 
 **真机发现**：`kill -9` 掉控制服务后，plist 里 `KeepAlive` 是 true、`print-disabled` 是 enabled，
