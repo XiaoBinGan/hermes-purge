@@ -421,6 +421,7 @@ npm rm -g hermes-purge
 | 0.21.3 | 主锚，0 处变体 | **未实测** | **已实测** —— CRLF 树闭环；另在 **Win11 ARM 真机**上跑通补丁层工具链（见下） |
 | 0.21.4 | 主锚，0 处变体 | **未实测** | **已实测** —— 沙箱（pristine `git archive` + 最小 config）上 `31/31 applied`、L1 14 项 + L2 14 项通过、`revert` 代码逐字节还原 |
 | 0.21.5 | 主锚，0 处变体 | **未实测** | **已实测** —— 上游 tag `abandoned-rc.10-v0.21.5` 的 pristine 树：`31/31 applied`、L1 14 项通过、`revert` 代码逐字节还原；L2 因沙箱缺 `ruamel.yaml` 未跑（环境限制，非补丁问题） |
+| 0.21.6 | 主锚，0 处变体 | **未实测** | **已实测** —— 上游 tag `abandoned-rc.1-v0.21.6` 的 pristine 树：`31 pending · 0 drifted` → `apply` 后 `31/31`、L1 14 项通过、`revert` 逐字节还原；L2 同因缺 `ruamel.yaml` 未跑 |
 
 - **0.21.0 为什么走变体**：0.21.2/0.21.3 才做的模块拆分（`approval_context` / `approval_detection` / `turn_stop_gates` / `stream_delivery` / `turn_request_assembly`）。0.21.0 里这些函数还在 `tools/approval.py`、`agent/conversation_loop.py`、`run_agent.py`。走变体的 18 条：C04 C05 C06 C11 C12 C13 C14 C16 C18 C18b C18c C18d C19b C19c C19d C19e C20 C20b。
 - **0.21.3+ 为什么不用变体**：主锚直接命中。`--status`（1.x）里一条 `[0.21.0]` 标记都不该出现。
