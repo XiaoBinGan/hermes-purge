@@ -337,6 +337,52 @@ t('二次 apply 不会丢掉第一份快照', () => {
   assert.strictEqual(fs.readFileSync(f, 'utf8'), 'v0\n');
 });
 
+t('revert 默认撤全部（不是只撤最后一层）', () => {
+  const root = path.join(tmp, 'txn4');
+  fs.mkdirSync(root, { recursive: true });
+  const f = path.join(root, 'w.py');
+  fs.writeFileSync(f, 'v0\n');
+  const s1 = txn.begin(root, ['w.py']);
+  fs.writeFileSync(f, 'v1\n');
+  txn.commit(s1);
+  const s2 = txn.begin(root, ['w.py']);
+  fs.writeFileSync(f, 'v2\n');
+  txn.commit(s2);
+  assert.strictEqual(txn.listSnapshots(root).length, 2);
+  const r = txn.revert(root);           // 不带参数 = 撤全部
+  assert.ok(r.ok, JSON.stringify(r));
+  assert.strictEqual(fs.readFileSync(f, 'utf8'), 'v0\n', '只撤了最后一层');
+});
+
+t('revert --one 只撤最后一层', () => {
+  const root = path.join(tmp, 'txn5');
+  fs.mkdirSync(root, { recursive: true });
+  const f = path.join(root, 'o.py');
+  fs.writeFileSync(f, 'v0\n');
+  const s1 = txn.begin(root, ['o.py']);
+  fs.writeFileSync(f, 'v1\n');
+  txn.commit(s1);
+  const s2 = txn.begin(root, ['o.py']);
+  fs.writeFileSync(f, 'v2\n');
+  txn.commit(s2);
+  txn.revert(root, { all: false });
+  assert.strictEqual(fs.readFileSync(f, 'utf8'), 'v1\n', '应只回滚到上一次 apply 之前');
+});
+
+t('coveredPaths 把 rel 归一成 / 分隔（否则 shim 卸载 skip 不到 → revert 误报 drifted）', () => {
+  const root = path.join(tmp, 'txn6');
+  fs.mkdirSync(path.join(root, 'venv', 'Lib', 'site-packages'), { recursive: true });
+  const f = path.join(root, 'venv', 'Lib', 'site-packages', '_hermes_purge.pth');
+  fs.writeFileSync(f, 'x\n');
+  const snap = txn.begin(root, ['venv/Lib/site-packages/_hermes_purge.pth']);
+  fs.writeFileSync(f, 'y\n');
+  txn.commit(snap);
+  const covered = txn.coveredPaths(root);
+  assert.ok([...covered].every((p) => !p.includes('\\')), '还有反斜杠: ' + [...covered].join(','));
+  assert.ok([...covered].some((p) => p.endsWith('site-packages/_hermes_purge.pth')), [...covered].join(','));
+  txn.revert(root);
+});
+
 /* ───────────── 文本实现 ───────────── */
 
 console.log('\n文本实现');

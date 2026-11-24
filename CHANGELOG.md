@@ -1,5 +1,50 @@
 # Changelog
 
+## 3.8.3 —— 本地升级测试暴露的四个回滚/快照问题
+
+按「升级 → 回滚 → 重装」跑了一遍真实闭环，四处都不对：
+
+### ① `revert` 把 shim 文件当成「被外部改过」（假报错）
+
+```
+回滚未完成：
+  以下文件被外部改过，未覆盖（--force 可强上）：
+   ! venv\Lib\site-packages\_hermes_purge_shim.py
+   ! venv\Lib\site-packages\_hermes_purge.pth
+```
+
+根因是**路径分隔符**：manifest 里 `rel` 是 Windows 反斜杠，而 `shim.uninstall` 用
+`path.relative(...).replace(/\\/g,'/')` 构造 skip 集合 —— 永远匹配不上，于是 shim 被先删掉，
+revert 再把它当成「外部改过」拒绝覆盖。现在 `coveredPaths` 统一归一成 `/`。
+
+### ② 文件被删了也报 drifted
+
+`revert` 原来只在「当前哈希 == apply 后的哈希」时才还原；文件不存在（我们自己删的 shim）就报 drifted。
+现在 `cur === null` 直接从快照放回 —— 文件不在更该恢复，而不是报错。
+
+### ③ 每次 apply 都留一份快照，撤销栈被空层淹没
+
+改写 0 条的 apply 也会建快照。实测攒了 **17 层**，其中大多是 0 改写 → 按一次 `revert` 只撤掉一个空层，
+看起来「revert 没反应」。现在 `changed === 0` 直接 `txn.abort`，不入栈。
+
+### ④ `revert` 默认只撤最后一层
+
+用户说 revert 的意思是「把补丁都退掉」，不是「退掉一次 apply」。现在默认**撤全部**（LIFO），
+`--one` 保留单层行为（调试用）。
+
+附带修一个状态误报：C54 的锚点由 C18c 注入产生，C18c 没落地时它本来无处可插，
+原来报 `drifted`（看着像补丁坏了）。新增 `requires` 声明，status 改报 `pending · 等 C18c 先应用`。
+
+### 升级测试结果（本机实测）
+
+```
+增量升级（模拟只打过 77 条的树）：status applied 77 / pending 1（C54）
+  → apply：改写 1 · 跳过 77 → 78/78
+全部 revert：一次撤 66 条 → 剩 11 条 config（默认跳过配置文件，设计如此）
+全新 apply：改写 66 · 跳过 12 · 3.4s → 78/78，L1 32 项 + L2 14 项通过，doctor 健康
+```
+
+新增 3 个用例：`revert 默认撤全部`、`--one 只撤最后一层`、`coveredPaths 归一化分隔符`。
 ## 3.8.2 —— 图像类拒答以前完全不命中（77 → 78 条）
 
 用户贴回模型原话：
