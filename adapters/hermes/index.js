@@ -48,16 +48,16 @@ function collectShim(capList) {
 }
 
 /** 事务要覆盖的 shim 文件相对路径 */
-function shimRelPaths(target) {
+function shimRelPaths(target, py) {
   const out = [];
-  for (const sp of platform.sitePackages(target)) {
+  for (const sp of platform.sitePackages(target, py)) {
     out.push(path.relative(target, path.join(sp, shim.SHIM_NAME)));
     out.push(path.relative(target, path.join(sp, shim.PTH_NAME)));
   }
   return out;
 }
 
-function installShim(target, entries) { return shim.install(target, entries); }
+function installShim(target, entries, opts) { return shim.install(target, entries, opts); }
 function uninstallShim(target, opts) { return shim.uninstall(target, opts); }
 function readShimLog(target) { return shim.readLog(target); }
 

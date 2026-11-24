@@ -91,6 +91,41 @@ t('Windows 布局 venv/Scripts/python.exe + Lib/site-packages', () => {
   assert.ok(sps.some((p) => p.endsWith(path.join('Lib', 'site-packages'))), JSON.stringify(sps));
 });
 
+t('pm 布局：venv 在 installs/<id>/environments/<hash>/venv，代码根分离（issue #15）', () => {
+  const home = path.join(tmp, 'pmhome');
+  const root = path.join(home, 'hermes-agent');
+  const venv = path.join(home, 'installs', 'de2311', 'environments', 'e1d008', 'venv');
+  fs.mkdirSync(root, { recursive: true });
+  fs.mkdirSync(path.join(venv, 'Scripts'), { recursive: true });
+  fs.mkdirSync(path.join(venv, 'Lib', 'site-packages'), { recursive: true });
+  fs.writeFileSync(path.join(venv, 'Scripts', 'python.exe'), '');
+  fs.writeFileSync(path.join(home, 'installs', 'de2311', 'facts.json'),
+    JSON.stringify({ packages: { venv: { environment: venv } } }));
+
+  const saved = process.env.HERMES_HOME;
+  process.env.HERMES_HOME = home;      // 让 pmHomeFor() 认这个 home
+  try {
+    const found = platform.findPython(root);
+    assert.ok(found && found.endsWith('python.exe'), 'findPython 没走 pm 布局: ' + found);
+    const sps = platform.sitePackages(root);
+    assert.ok(sps.some((p) => p.endsWith(path.join('Lib', 'site-packages'))), JSON.stringify(sps));
+    // facts.json 缺失也要靠 environments/*/venv 兜底
+    fs.rmSync(path.join(home, 'installs', 'de2311', 'facts.json'));
+    assert.ok(platform.sitePackages(root).length > 0, 'facts.json 缺失时没兜底');
+    // py 单独传进来也要认（issue：PY 指对了但 sitePackages 不读 PY）
+    assert.ok(platform.sitePackages('', found).length > 0, 'sitePackages(root, py) 没读 py');
+  } finally {
+    if (saved === undefined) delete process.env.HERMES_HOME; else process.env.HERMES_HOME = saved;
+  }
+});
+
+t('不属于任何 hermes home 的目录不会误认 pm venv', () => {
+  const root = path.join(tmp, 'stranger');
+  fs.mkdirSync(root, { recursive: true });
+  assert.strictEqual(platform.pmVenvsFor(root).length, 0);
+  assert.deepStrictEqual(platform.sitePackages(root), []);
+});
+
 t('符号定位：def / class / 模块级赋值 都能找到', () => {
   const root = path.join(tmp, 'sym');
   fs.mkdirSync(path.join(root, 'pkg'), { recursive: true });
@@ -423,6 +458,32 @@ t('C27 方法级插入要缩进 8 格（4 格会 IndentationError）', () => {
   const idx = lines.findIndex((l) => l.includes('return False'));
   assert.ok(idx > 0, lines.join('|'));
   assert.strictEqual(lines[idx].match(/^ */)[0].length, 8, JSON.stringify(lines[idx]));
+});
+
+t('C20b 锚点只认 import json：import 块顺序不同也要能落（issue #1）', () => {
+  const { PATCHES } = require('../lib/patches');
+  const c20b = PATCHES.find((p) => p.id === 'C20b');
+  assert.ok(c20b, 'C20b 缺失');
+  const root = path.join(tmp, 'c20b');
+  fs.mkdirSync(path.join(root, 'agent', 'transports'), { recursive: true });
+  const file = path.join(root, 'agent', 'transports', 'chat_completions.py');
+  // 用户宿主（issue #1）的真实 import 顺序：hashlib / json / re / string / typing
+  fs.writeFileSync(file,
+    'import hashlib\nimport json\nimport re\nimport string\nfrom typing import Any\n\n\ndef f():\n    pass\n');
+  const ctx = { target: root };
+  const sp = Object.assign({}, c20b, { file: 'agent/transports/chat_completions.py' });
+  assert.strictEqual(impls.probeText(sp, 'C20b', ctx).status, 'pending');
+  assert.ok(impls.applyText(sp, 'C20b', ctx).changed);
+  assert.strictEqual(impls.probeText(sp, 'C20b', ctx).status, 'applied');
+  const body = fs.readFileSync(file, 'utf8');
+  assert.ok(/^import os  # \[hermes-purge\] C20b$/m.test(body), body);
+  assert.ok(!impls.applyText(sp, 'C20b', ctx).changed, '第二次不该再写');
+});
+
+t('C20 注入块自带 os，不依赖 C20b 落没落', () => {
+  const { PATCHES } = require('../lib/patches');
+  const c20 = PATCHES.find((p) => p.id === 'C20');
+  assert.ok(c20 && /__import__\("os"\)/.test(c20.to), 'C20 还在用模块级 os：\n' + (c20 && c20.to));
 });
 
 t('splice 幂等（sentinel 判定）', () => {
