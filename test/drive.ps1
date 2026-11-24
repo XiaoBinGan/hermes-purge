@@ -1,4 +1,4 @@
-# drive.ps1 — 在 Hermes 桌面窗口里真实输入并提交一条消息
+﻿# drive.ps1 — 在 Hermes 桌面窗口里真实输入并提交一条消息
 # 用法: pwsh -File drive.ps1 -Text "..." -Shot out.png [-WaitSec 120]
 param(
   [Parameter(Mandatory = $true)][string]$Text,

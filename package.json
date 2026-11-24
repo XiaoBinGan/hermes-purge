@@ -1,6 +1,6 @@
 {
   "name": "hermes-purge",
-  "version": "3.1.6",
+  "version": "3.2.0",
   "description": "宿主无关的能力层（capability）引擎 —— adapter 注册表 + AST/shim/文本/配置 四层落地，内置 Hermes Agent 与 DeepSeek Harness 两个 adapter；事务回滚 + 三级验证 + 观测。跨 macOS / Windows。",
   "license": "MIT",
   "author": "XiaoBinGan",
@@ -71,7 +71,9 @@
     "test:parity-layers": "node test/parity-layers.js",
     "test:ast-batch": "node test/ast-batch.js",
     "test:panel-stale": "node test/panel-stale.js",
-    "test:agent-restart": "node test/agent-restart.js"
+    "test:agent-restart": "node test/agent-restart.js",
+    "test:win": "powershell -NoProfile -ExecutionPolicy Bypass -File test/win/run-smoke.ps1",
+    "test:engine": "powershell -NoProfile -ExecutionPolicy Bypass -File test/win/run-engine.ps1"
   },
   "engines": {
     "node": ">=18"

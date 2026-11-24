@@ -12,21 +12,37 @@ import ast
 import json
 import sys
 
+# Windows 控制台默认 cp936：中文路径 / 中文报错一写就 UnicodeEncodeError，
+# 上游只能看到「助手输出为空」。这里把 stdout 钉死成 UTF-8，emit 再走
+# ensure_ascii，双保险。
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except Exception:  # pragma: no cover - 老 python 没有 reconfigure
+    pass
+
+BOM = "\ufeff"
+_BOM = {}  # path -> 原文件是否带 BOM（改完要原样写回去）
+
 
 def emit(obj):
-    sys.stdout.write(json.dumps(obj, ensure_ascii=False) + "\n")
+    sys.stdout.write(json.dumps(obj, ensure_ascii=True) + "\n")
 
 
 def load(path):
     with open(path, "rb") as f:
         raw = f.read()
     text = raw.decode("utf-8")
+    # 带 BOM 的源码：留着 \ufeff 会让 ast.parse 直接 SyntaxError
+    if text.startswith(BOM):
+        _BOM[path] = True
+        text = text[1:]
     return text
 
 
 def save(path, text):
+    out = (BOM if _BOM.get(path) else "") + text
     with open(path, "wb") as f:
-        f.write(text.encode("utf-8"))
+        f.write(out.encode("utf-8"))
 
 
 def eol_of(text):

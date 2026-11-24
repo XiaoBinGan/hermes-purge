@@ -4,7 +4,7 @@
 让模型被拒时自动重采样。31 条能力、四层落地（AST / 运行时 shim / 文本 / 配置）、
 改坏了能逐字节回滚。
 
-**一条命令安装，一条命令撤销。** 当前版本 **3.1.6** · 零依赖 · Node ≥18 · macOS + Windows 实测。
+**一条命令安装，一条命令撤销。** 当前版本 **3.2.0** · 零依赖 · Node ≥18 · macOS + Windows 实测。
 
 > 借鉴了 [dsh-purge](https://github.com/YuJunZhiXue/dsh-purge) 的一个判断（「不跟模型讲道理，直接改宿主」），
 > 但引擎、补丁清单、验证方式、CLI 都是为 Hermes 独立写的 —— 没有一行共享代码。逐条对账见下文「我们比它强在哪」。
@@ -23,36 +23,52 @@ git clone -b v2-capability git@github.com:XiaoBinGan/hermes-purge.git
 cd hermes-purge
 ```
 
-### 2. 一条命令装好并应用
+### 2. 装（就两行）
 
-**不需要 GitHub 账号、不需要 npm token、不需要登录** —— Release 资产是公开的：
-
-```bash
-# macOS / Linux：下载安装脚本直接跑
-curl -fsSL https://github.com/XiaoBinGan/hermes-purge/releases/latest/download/install.sh | bash -s -- --setup --yes
-```
-
-```powershell
-# Windows：下载 install.ps1 后运行
-irm https://github.com/XiaoBinGan/hermes-purge/releases/latest/download/install.ps1 -OutFile $env:TEMP\hp-install.ps1
-powershell -ExecutionPolicy Bypass -File $env:TEMP\hp-install.ps1 -Setup -Yes
-```
-
-也可以先 clone 再装（改代码即时生效，适合开发）：
-
-```bash
-git clone -b main https://github.com/XiaoBinGan/hermes-purge.git
-cd hermes-purge && ./install.sh --setup --yes
-```
-
-或直接吃 npm 包（同样匿名）：
+macOS、Linux、Windows 的 PowerShell / CMD / Git Bash，**同一条命令**：
 
 ```bash
 npm i -g https://github.com/XiaoBinGan/hermes-purge/releases/latest/download/hermes-purge.tgz
 purge setup --yes
 ```
 
-四个方式做的事一样：把 `purge` / `hp` 装进 PATH → 检测宿主 → 打印计划 → 应用并验证。
+不需要 GitHub 账号、不需要 npm token、不需要管理员、不用改 PATH、不用管中文用户名或带空格的路径
+（npm 生成的 `purge.cmd` / `purge` 用相对路径定位，Windows 上是 `%~dp0`，不写死安装目录）。
+
+卸载也只两行：
+
+```bash
+purge uninstall --yes
+npm rm -g hermes-purge
+```
+
+> 为什么只有这两行：补丁引擎需要 Node，而 npm 已经在做「找到全局 bin → 写启动器」这件事。
+> 自己再写一套安装脚本，只是在重复造它，还顺带引入 PATH / 编码 / 软链三处平台差异。
+
+<details>
+<summary>想改代码（要「改完立即生效」）、或者机器上没有 npm？</summary>
+
+先 clone 再装，会把仓库位置链接到 `~/.hermes-purge`（Windows 用目录联接，不是复制）：
+
+```bash
+git clone -b main https://github.com/XiaoBinGan/hermes-purge.git
+cd hermes-purge && ./install.sh --setup --yes
+```
+
+Windows 上如果之前装过旧版（`ln -s` 退化成了复制），重跑一次 `./install.sh --relink` 换成联接。
+
+也可以只下脚本装（不 clone）：
+
+```bash
+curl -fsSL https://github.com/XiaoBinGan/hermes-purge/releases/latest/download/install.sh | bash -s -- --setup --yes
+```
+
+```powershell
+irm https://github.com/XiaoBinGan/hermes-purge/releases/latest/download/install.ps1 -OutFile $env:TEMP\hp-install.ps1
+powershell -ExecutionPolicy Bypass -File $env:TEMP\hp-install.ps1 -Setup -Yes
+```
+
+</details>
 
 ### 3. 确认它在生效
 
@@ -92,6 +108,7 @@ purge parity --diff=mac.json     # 在另一台机器上比对，一致返回 0�
 | `找不到 config.yaml` / `EHP_CONFIG` | 用 `--home=` 指到配置根：`purge status --home=$HOME/.hermes`（Windows：`--home=%USERPROFILE%\.hermes`） |
 | `python=(无)` | 宿主 venv 没找到：AST/shim 两层会降级成文本层，仍可用但抗升级能力差一档 |
 | 面板按钮报 `401` / `控制服务没响应` | 先起控制服务：`purge serve`（只监听 127.0.0.1:9123，带 token） |
+| Windows 上 `Cannot find module 'G:\????...'` | 3.1.4 已修：旧版 `install.ps1` 把中文安装路径按 ASCII 写进 `.cmd`。重跑最新 `install.ps1`（会用 `%~dp0` 启动器 + UTF-8 路径文件）即可 |
 
 更细的排查见 [`docs/troubleshooting.md`](docs/troubleshooting.md)。
 

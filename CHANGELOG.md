@@ -1,5 +1,71 @@
 # Changelog
 
+## 3.2.0 —— 打开 Hermes 先弹免责声明（改宿主源码的工具不该悄悄生效）
+
+桌面端注入的脚本现在会在首次启动时弹一个**阻塞式免责声明**，确认后才继续使用：
+
+- 说明会改动 Hermes 源码与配置（关审批/护栏、注入提示词），`purge revert` 可逐字节还原
+- 只在你拥有或被授权使用的机器上使用、后果自负、遵守当地法律与组织规定
+- 升级 Hermes 后需重跑 `purge setup` / `purge desktop install`
+- 「我已了解并继续」写入 `localStorage['hermes-purge.eula.v1']`，同一版本只弹一次；
+  存储不可用（隐私模式等）时每次启动都弹 —— 宁可烦，也别假装没改过东西
+- 「看说明」链到仓库 README
+
+顺带修 `purge desktop sync`：它之前重新生成脚本时**丢掉了控制服务的 port/token**，
+刷新后面板按钮会 401；现在原样带上。
+
+验证：jsdom 断言「首次弹出 → 文案含授权使用 → 点击后消失」；再用 headless Chromium
+渲染注入后的页面，DOM 里确认 `#purge-eula-mask` 与按钮都在。
+
+## 3.1.9 —— Windows 真正的一键：装完直接能敲 purge（PATH 自动写）
+
+之前 `install.ps1` 装完只打印一段「把下面这行加到 PATH」的命令，等于还要用户自己再来一步。
+现在默认直接写用户级 PATH（`HKCU\Environment`，不需要管理员），并且**当前会话立刻生效**：
+
+- 新增 `-NoPath`：不想改 PATH 的人可以跳过
+- 幂等：已在 PATH 里就只说一句，不会重复追加
+- 装完接着 `purge setup --yes`（`-Setup -Yes`），一条命令走完 安装 → 识别宿主 → 应用 → 验证
+
+真机实测（Release 资产 + 本地镜像）：
+
+```
+install.ps1 -BaseUrl <镜像> -Dest "…\中文 一键\hermes-purge" -Bin "…\bin" -Setup -Yes
+  → 下载 → 解压 → 装到中文路径 → 已把 …\bin 加到用户 PATH → purge setup: 31 条 · 已生效 31
+  → purge --version = 3.1.9
+```
+
+## 3.1.8 —— install.ps1 自举下载在真实网络下可用（TLS 1.2 / curl 兜底 / -BaseUrl 镜像）
+
+3.1.7 把 Windows 修复进了资产，但在「只下载 install.ps1、仓库不在本机」这条路径上还有个真问题：
+`Invoke-WebRequest` 在 Windows PowerShell 5.1 上默认可能协商 TLS 1.0，GitHub 只收 1.2+，
+表现就是 `基础连接已经关闭: 发送时发生错误` —— 用户看到的是「下载源码包失败」。
+
+- 启动即设 `[Net.ServicePointManager]::SecurityProtocol = Tls12`，并关掉进度条（大文件快很多）
+- IWR 失败/拿到空文件时自动退到系统自带的 `curl.exe -fsSL --retry 3`
+- 新增 `-BaseUrl`：直连 GitHub 不稳时可换镜像，例如
+  `-BaseUrl https://ghproxy.com/https://github.com/XiaoBinGan/hermes-purge`
+- 失败信息里直接给「换镜像 / 手动下载」的下一步，不再只抛异常
+
+本地用 HTTP 镜像实测：`install.ps1 -BaseUrl http://127.0.0.1:8899` → 下载 → 解压 → 装到
+`…\中文 自举装\` → `purge --version = 3.1.8`，`%~dp0` 启动器与路径文件均正常。
+
+## 3.1.7 —— Windows 安装与运行时修复进主线（重打 Release 资产）
+
+把 `lane/win` 的全部改动合进 `main`，并**重打资产** —— 3.1.6 的 `install.ps1` / `install.sh` 还是旧的：
+
+- `install.ps1`：`.cmd` 里不再写安装路径（旧版把中文目录按 ASCII 写成 `G:\????` → `MODULE_NOT_FOUND`），
+  改为 `%~dp0` 启动器 + UTF-8 路径文件；脚本本身 UTF-8 **with BOM**（PS 5.1 只按 BOM 判定编码）
+- `install.sh`：Git Bash / MSYS2 下识别 Windows，仓库位置用 `mklink /J` 目录联接（旧版 `ln -s` 会退化成复制，
+  改仓库代码不生效），命令写成纯 ASCII 的 `.cmd`；新增 `--relink` 重建联接
+- Windows 运行时：`spawnAny`（`.bat/.cmd` 经 `cmd.exe`，Node ≥20 直连 EINVAL）· `pyEnv` 强制 UTF-8 ·
+  `_ast.py` 的 `ensure_ascii` + BOM 保留 · `pickPython` 真探一次再认
+- 测试可移植：`desktop-dom` 不再写死 `/Users/supre/...` 的 jsdom；`test/win/{run-engine,run-smoke}.ps1`
+  不再依赖 `C:\purge-test`；新增 `npm run test:win`、`test:engine` 与「每个 `.ps1` 必须带 BOM」的守卫
+- 合并上游 3.1.5/3.1.6（`parity` 效果指纹、`SENTINELS`、`conf-yaml` 测试、Hermes 0.21.4）
+
+真机（Win11 · Node 25 · Python 3.12 · PS 5.1）：`npm test` 12 个文件全绿 · `test:engine` ENGINE_OK ·
+`test:win` SMOKE_EXIT=0 · 真实宿主 31/31、`verify --level=3` 端到端通过、`doctor` 健康、`hp` 可用。
+
 ## 3.1.6 —— 支持 Hermes 0.21.4（31/31），修两个只有新版本才暴露的 bug
 
 在 pristine 的 0.21.4 树（`git archive HEAD` + 最小 config/env/SOUL）上跑，先暴露两个真问题，
@@ -83,6 +149,32 @@ macOS 与 Windows 现在各管一台机器，要求「绝对不能冲突」。�
 - `docs/lanes.md`：分支约定（`lane/mac` / `lane/win` / `main` 只做集成）、文件归属表、加锚点的写法
 - 版本号只在集成方改，泳道分支不碰 —— 去掉最常见的必冲突项
 - 联调验证：重构后本机 31/31 不变、全量 41+30+33+12+16+10+7+12+DOM 全绿、package 16/16
+
+### Windows 侧修复（lane/win）
+
+1. **`.cmd` 里不出现真实路径**：旧 `install.ps1` 用 `Set-Content -Encoding ASCII` 把安装目录写进批处理，
+   中文路径变成 `G:\????`，任何 `purge` 调用都 `MODULE_NOT_FOUND`；改成 `%~dp0` 启动器 + UTF-8 路径文件，
+   并把 `install.ps1` 自身转成 **UTF-8 with BOM**（PS 5.1 只按 BOM 判定脚本编码）。
+2. **Git Bash 里 `ln -s` 退化成复制**：`~/.hermes-purge` 变成旧副本、且只写 bash shim（PowerShell 跑不了）。
+   现在识别 MINGW/MSYS/Cygwin，仓库位置用 `mklink /J` 目录联接（免管理员、改代码即时生效），
+   命令写成纯 ASCII 的 `purge.cmd` / `hp.cmd`，新增 `--relink` 重建联接，卸载用 `rmdir` 只删链接。
+3. **Windows 运行时**：`spawnAny`（`.bat/.cmd` 经 `cmd.exe`，Node ≥20 直连 EINVAL）· `pyEnv` 强制 UTF-8 ·
+   `_ast.py` 的 `ensure_ascii` + BOM 保留 · `pickPython` 真探一次再认 —— 这四项之前只活在临时副本里，现在进仓库。
+4. **`replace` 型 cap 的判活**：`to` 里没带 cap id 的老补丁会被误判成 drifted（C13/C14/C16）。现在认
+   「`to` 里那行带 `[hermes-purge]` 的代码」即算 applied。
+5. **`yamlApprovals`（G01）**：宿主回写成 `mode: smart` 时旧代码只改 timeout、永远 pending；现在有 mode 就改、
+   没有就插，并把重复的 `# [hermes-purge]` 收敛成一个。
+6. **`win-lane` 锚点**：本机 `chat_completions.py` 的 import 块不走主锚，C20b 在 `lib/anchors/hermes-win.js` 里
+   补了真实相邻行（`import hashlib` / `import json`）。
+7. **测试可移植**：`desktop-dom.js` 不再写死 `/Users/supre/...` 的 jsdom；`test/win/run-engine.ps1` 与
+   `run-smoke.ps1` 不再写死 `C:\purge-test`（现场生成锚点文件 / 相对路径）；新增 `npm run test:engine`、
+   `npm run test:win`，以及「仓库里每个 `.ps1` 必须带 UTF-8 BOM」的守卫断言。
+
+8. **安装主路径简化**：README 顶部改成 npm 两行（Release 的 `hermes-purge.tgz` 稳定别名）——
+   不需要 GitHub 账号 / npm token / 改 PATH，Windows 的 cmd、PowerShell、Git Bash 同一条命令。
+
+真机结果（Win11 · Node 25 · Python 3.12 · PS 5.1）：`npm test` 全绿（41/33/33/15/16/10/7/12/16 + DOM）·
+`test:win` `SMOKE_EXIT=0` · `test:engine` `ENGINE_OK` · 真实宿主 `status` 31/31、`verify --level=2` 通过、`doctor` 健康。
 
 ## 3.1.3 —— 安装不再需要登录（Release 自举）
 

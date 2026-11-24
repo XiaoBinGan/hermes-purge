@@ -857,8 +857,17 @@ function cmdDoctor() {
   const log = ADAPTER.readShimLog ? ADAPTER.readShimLog(TARGET) : [];
   if (log.length) {
     const bad = log.filter((l) => l.ok === false);
-    console.log('\n  shim 日志 ' + log.length + ' 条，失败 ' + bad.length + ' 条');
-    for (const b of bad.slice(0, 5)) console.log('   ' + paint('✖', C.r) + ' ' + JSON.stringify(b));
+    // attr-missing = 这版宿主没有那个属性（版本差异），不是补丁失败：单列出来、不算红
+    const missing = bad.filter((l) => l.err === 'attr-missing');
+    const real = bad.filter((l) => l.err !== 'attr-missing');
+    console.log('\n  shim 日志 ' + log.length + ' 条，失败 ' + real.length + ' 条' +
+      (missing.length ? C.dim + '（另有 ' + missing.length + ' 条「宿主无此属性」跳过）' + C.reset : ''));
+    for (const b of real.slice(0, 5)) console.log('   ' + paint('✖', C.r) + ' ' + JSON.stringify(b));
+    if (missing.length) {
+      const attrs = [...new Set(missing.map((m) => (m.module || '?') + '.' + (m.attr || '?')))];
+      console.log('   ' + paint('·', C.y) + ' ' + C.dim + '版本差异跳过：' + attrs.slice(0, 6).join(', ') +
+        (attrs.length > 6 ? ' …' : '') + C.reset);
+    }
   }
   console.log('\n' + (rep.ok ? paint('健康', C.g) : paint('有问题', C.y)));
   if (!rep.ok) process.exitCode = 1;

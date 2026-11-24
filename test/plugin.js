@@ -26,7 +26,8 @@ function t(name, fn) {
 
 const py = (() => {
   const p = require('../lib/v2/platform');
-  return p.findPython(ROOT) || p.which('python3') || p.which('python');
+  // pickPython 会真的探一次：Windows 上 which('python3') 常是 .bat 代理，spawn 直接 EINVAL
+  return p.pickPython(ROOT);
 })();
 
 /** 造一棵最小 Hermes 树：只要 hermes_cli/agent + config.yaml 就够探测 */
@@ -81,9 +82,10 @@ console.log(JSON.stringify({ target: '/fake/tree', rows }));
 `);
 
 function runPy(code, env) {
-  return spawnSync(py, ['-c', code], {
-    encoding: 'utf8', windowsHide: true,
-    env: Object.assign({}, process.env, env || {}),
+  const p = require('../lib/v2/platform');
+  return p.spawnAny(py, ['-c', code], {
+    encoding: 'utf8',
+    env: p.pyEnv(env || {}),
   });
 }
 

@@ -1,11 +1,21 @@
 // 用宿主仓库里的 jsdom 真实跑一遍注入脚本，验证 ul>li 判定
 // jsdom 借用宿主仓库里的（本仓零依赖）。找不到就跳过：这只验注入逻辑，不是必跑项。
+const pathMod = require('path');
+const os = require('os');
 let JSDOM = null;
-for (const p of [
-  '/Users/supre/.hermes/hermes-agent/node_modules/jsdom',
-  process.env.HERMES_REPO ? require('path').join(process.env.HERMES_REPO, 'node_modules/jsdom') : '',
-].filter(Boolean)) {
+// 宿主仓库优先（借用它的依赖，本仓仍是零依赖）；找不到就用本仓 devDeps 里临时装的。
+// 以前这里写死了 /Users/supre/... —— 只有那台 Mac 能跑，Windows 永远「跳过」。
+const candidates = [
+  process.env.HERMES_REPO ? pathMod.join(process.env.HERMES_REPO, 'node_modules/jsdom') : '',
+  process.env.HERMES_HOME ? pathMod.join(process.env.HERMES_HOME, 'hermes-agent', 'node_modules', 'jsdom') : '',
+  pathMod.join(os.homedir(), '.hermes', 'hermes-agent', 'node_modules', 'jsdom'),
+  pathMod.join(__dirname, '..', 'node_modules', 'jsdom'),
+].filter(Boolean);
+for (const p of candidates) {
   try { JSDOM = require(p).JSDOM; break; } catch (e) { /* 继续找 */ }
+}
+if (!JSDOM) {
+  try { JSDOM = require('jsdom').JSDOM; } catch (e) { /* 都没有 */ }
 }
 if (!JSDOM) { console.log('跳过 DOM 注入用例（没找到 jsdom）'); process.exit(0); }
 const desktop = require('../lib/v2/desktop.js');
@@ -44,7 +54,16 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 function fail(m) { console.log('✖ ' + m); process.exit(1); }
 
 (async () => {
-  await sleep(600);                       // 等注入脚本的首屏循环跑完
+  await sleep(1200);                      // 等注入脚本的首屏循环 + 免责声明（700ms 延迟）跑完
+
+  // 首次启动必须弹免责声明（改宿主源码的工具不能悄悄生效）
+  const eula = window.document.getElementById('purge-eula-mask');
+  if (!eula) fail('没有弹免责声明');
+  if (!/免责声明/.test(eula.textContent)) fail('免责声明文案不对：' + eula.textContent.slice(0, 80));
+  if (!/授权使用/.test(eula.textContent)) fail('缺少「授权使用」提醒');
+  window.document.getElementById('purge-eula-ok').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  if (window.document.getElementById('purge-eula-mask')) fail('点「我已了解」后弹框没关');
+  console.log('✓ 首次启动弹免责声明，确认后消失');
   const btn = window.document.querySelector('[data-purge-nav]');
   const lis = window.document.querySelectorAll('ul.gap-px > li');
   if (!btn) fail('没有注入入口');
