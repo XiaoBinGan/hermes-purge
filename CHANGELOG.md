@@ -1,5 +1,22 @@
 # Changelog
 
+## 3.1.7 —— Windows 安装与运行时修复进主线（重打 Release 资产）
+
+把 `lane/win` 的全部改动合进 `main`，并**重打资产** —— 3.1.6 的 `install.ps1` / `install.sh` 还是旧的：
+
+- `install.ps1`：`.cmd` 里不再写安装路径（旧版把中文目录按 ASCII 写成 `G:\????` → `MODULE_NOT_FOUND`），
+  改为 `%~dp0` 启动器 + UTF-8 路径文件；脚本本身 UTF-8 **with BOM**（PS 5.1 只按 BOM 判定编码）
+- `install.sh`：Git Bash / MSYS2 下识别 Windows，仓库位置用 `mklink /J` 目录联接（旧版 `ln -s` 会退化成复制，
+  改仓库代码不生效），命令写成纯 ASCII 的 `.cmd`；新增 `--relink` 重建联接
+- Windows 运行时：`spawnAny`（`.bat/.cmd` 经 `cmd.exe`，Node ≥20 直连 EINVAL）· `pyEnv` 强制 UTF-8 ·
+  `_ast.py` 的 `ensure_ascii` + BOM 保留 · `pickPython` 真探一次再认
+- 测试可移植：`desktop-dom` 不再写死 `/Users/supre/...` 的 jsdom；`test/win/{run-engine,run-smoke}.ps1`
+  不再依赖 `C:\purge-test`；新增 `npm run test:win`、`test:engine` 与「每个 `.ps1` 必须带 BOM」的守卫
+- 合并上游 3.1.5/3.1.6（`parity` 效果指纹、`SENTINELS`、`conf-yaml` 测试、Hermes 0.21.4）
+
+真机（Win11 · Node 25 · Python 3.12 · PS 5.1）：`npm test` 12 个文件全绿 · `test:engine` ENGINE_OK ·
+`test:win` SMOKE_EXIT=0 · 真实宿主 31/31、`verify --level=3` 端到端通过、`doctor` 健康、`hp` 可用。
+
 ## 3.1.6 —— 支持 Hermes 0.21.4（31/31），修两个只有新版本才暴露的 bug
 
 在 pristine 的 0.21.4 树（`git archive HEAD` + 最小 config/env/SOUL）上跑，先暴露两个真问题，
