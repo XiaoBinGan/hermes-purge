@@ -1,5 +1,29 @@
 # Changelog
 
+## 3.8.4 —— `status` 头部写包版本（「我装的到底是哪版」）
+
+用户反馈「我的 Hermes 还是显示 v3.20」，查下来是三个版本号被混在一起看：
+
+| 版本 | 从哪看 | 本机实测 |
+|------|------|------|
+| hermes-purge（本工具）| `purge --version` / `purge status` 第一行 | 3.8.4 |
+| Hermes 宿主（Python 包）| `purge status` 第二行 `hermes=` | `git.352b249.dirty`（源码装）|
+| Hermes 桌面端（Electron）| 应用自己的「关于」页 | 与 purge 完全无关 |
+
+而 `purge status` 第一行以前写的是 **`purge v2`** —— 那是**引擎代号**，不是版本号。
+装完 3.8.x 也看不出来，用户自然以为没升级。现在改成：
+
+```
+purge 3.8.4 · engine v2  target=/path/to/hermes-agent
+hermes=git.352b249.dirty（源码装：版本按锚点匹配结果判定）
+python=…/venv/bin/python  ·  caps 78  ·  applied 78  pending 0  drifted 0
+```
+
+`--help` 首行也带上包版本。面板侧边栏里显示的版本是**补丁时刻的 purge 版本**，
+升级后要 `purge desktop sync` 才会刷新（`doctor` 会报「面板快照过期」）。
+
+顺带说明：hermes-purge 的版本序列是 1.x → 2.0 → 3.1.x → 3.8.x，**从来没有 3.20**。
+如果某处显示 v3.20，那是 Hermes 桌面端自己的版本，不是本工具的。
 ## 3.8.3 —— 本地升级测试暴露的四个回滚/快照问题
 
 按「升级 → 回滚 → 重装」跑了一遍真实闭环，四处都不对：

@@ -48,7 +48,7 @@ const paint = (s, code) => (process.stdout.isTTY ? code + s + C.reset : s);
 
 function usageText() {
   return [
-    'purge —— hermes-purge v2（capability layer）',
+    'purge ' + require('../package.json').version + ' —— hermes-purge（capability layer, engine v2）',
     '',
     '  purge setup  [--yes] [--dry] 一条命令：检测 → 计划 → 应用 → 验证',
     '  purge uninstall [--yes]      撤销补丁 + 删状态目录（卸干净）',
@@ -367,7 +367,10 @@ function cmdStatus() {
   }
 
   const by = (s) => rows.filter((r) => r.status === s).length;
-  console.log(C.b + 'purge v2' + C.reset + (ADAPTER.id === 'hermes' ? '' : ' ' + C.dim + '· ' + ADAPTER.id + C.reset) + '  target=' + TARGET);
+  // 头部必须写**包版本**，不能只写引擎代号：以前这里写 'purge v2'，
+  // 用户装完 3.8.x 也看不到自己装的是哪版（真实困惑：「我的 Hermes 还显示 v3.20」）。
+  console.log(C.b + 'purge ' + pkgVersion() + C.reset + C.dim + ' · engine v2' + C.reset +
+    (ADAPTER.id === 'hermes' ? '' : ' ' + C.dim + '· ' + ADAPTER.id + C.reset) + '  target=' + TARGET);
   // 宿主版本：以前只在 1.x 入口显示，且读 pyproject 的占位 0.0.0（pm/editable 装法全是这个值）。
   // 现在统一由 platform.hermesVersion 多来源解析，读不到就说 unknown —— 不再编数字。
   const hv = platform.hermesVersion ? platform.hermesVersion(TARGET) : null;
