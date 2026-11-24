@@ -9,11 +9,11 @@
 | 项 | 值 |
 |---|---|
 | 分支 | `main` = `ef05392`；`lane/mac` 已合并 main 全部内容（落后 0），另有 30 个提交 |
-| 版本 | 3.7.3（两边一致） |
-| 补丁面 | **77 条**（两边 cap 清单完全一致） |
-| macOS 实机（Hermes 0.21.0） | `caps 77 · applied 65 · pending 0 · drifted 0` · L1 19 / L2 14 通过 |
-| 0.21.4 / 0.21.5 沙箱 | `applied 72 · drifted 0` |
-| 效果指纹 | `purge parity --out=mac.json` → 65/77（code 52/64 · config 11/11 · prompt 2/2） |
+| 版本 | 3.8.2（两边一致） |
+| 补丁面 | **78 条**（两边 cap 清单完全一致） |
+| macOS 实机（Hermes 0.21.0） | `caps 78 · applied 65 · pending 0 · drifted 0` · L1 19 / L2 14 通过 |
+| 0.21.4 / 0.21.5 沙箱 | `applied 73 · drifted 0` |
+| 效果指纹 | `purge parity --out=mac.json` → 65/78 |
 
 ## ⚠️ Windows 侧待办（2026-11-24 22:50 更新，三件事）
 
@@ -48,6 +48,14 @@ print(sum(1 for r in json.load(sys.stdin)['rows'] if r['status']=='applied'), 'a
 grep -c 'hermes-purge' G:/hermes/hermes-agent/tools/terminal_tool_guards.py
 # 状态说 applied 但文件里 marker 数是 0 → 就是这个 bug
 ```
+
+### ④ 3.8.2 新增的 C52 锚点在任何样本里都不存在
+
+`tools/approval_wmic.py` 在 0.21.0 / 0.21.4 / 0.21.5 / 0.21.6 / 0.21.7 / 上游 HEAD **全部 0 命中**。
+已标 `since: 0.21.99` 归入版本缺口，但锚点本身需要 win 侧核实（第四次了）。
+
+C53（`agent/fallback_cooldown.py`）/ C54（`agent/turn_stop_gates.py`）没问题：
+0.21.4+ 都有该文件，实测 `applied`。
 
 **拿到修复**：`git merge origin/lane/mac`（不会碰 `lib/anchors/hermes-win.js`），
 或直接 `git checkout origin/lane/mac -- lib/v2/impls.js lib/patches.js` 只取这两处。
