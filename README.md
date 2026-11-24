@@ -4,7 +4,7 @@
 让模型被拒时自动重采样。77 条能力、四层落地（AST / 运行时 shim / 文本 / 配置）、
 改坏了能逐字节回滚。
 
-**一条命令安装，一条命令撤销。** 当前版本 **3.7.2** · 零依赖 · Node ≥18 · macOS + Windows 实测。
+**一条命令安装，一条命令撤销。** 当前版本 **3.7.3** · 零依赖 · Node ≥18 · macOS + Windows 实测。
 
 > 借鉴了 [dsh-purge](https://github.com/YuJunZhiXue/dsh-purge) 的一个判断（「不跟模型讲道理，直接改宿主」），
 > 但引擎、补丁清单、验证方式、CLI 都是为 Hermes 独立写的 —— 没有一行共享代码。逐条对账见下文「我们比它强在哪」。
@@ -113,6 +113,10 @@ purge parity --diff=mac.json     # 在另一台机器上比对，一致返回 0�
 
 更细的排查见 [`docs/troubleshooting.md`](docs/troubleshooting.md)。
 
+> **入口只有一套了**：`purge` 就是 `bin/purge.js`（v2 引擎）。老的 `node bin/hermes-purge.js --status/--apply/…`
+> 仍然能用，但它现在只是**转发壳** —— 3.7.2 之前那个 1.x 文本引擎不认识 `yamlSet` / `yamlToolOutput`，
+> 会把 G03、G04…G09 全报成「未知 kind / drifted」，看着像补丁坏了，其实是走错门。
+
 ---
 
 > **两条泳道并行**：macOS 与 Windows 各自维护自己的锚点文件与分支，互不覆盖。
@@ -202,7 +206,7 @@ cd hermes-purge
 ### 2. 先看状态，不做任何改动
 
 ```bash
-node bin/hermes-purge.js --status
+purge status            # 或 node bin/purge.js status
 ```
 
 会列出 77 条补丁各自是 `applied` / `pending` / `drifted` / `missing`。
@@ -210,7 +214,7 @@ node bin/hermes-purge.js --status
 如果显示「找不到 Hermes 安装目录」，用下面任一方式指定：
 
 ```bash
-node bin/hermes-purge.js --status --target=/path/to/hermes-agent   # 直接指定
+purge status --target=/path/to/hermes-agent   # 直接指定
 export HERMES_HOME=/path/to/hermes                                  # 或设环境变量
 ```
 
@@ -222,7 +226,7 @@ Windows 用 `set HERMES_HOME=D:\project\hermes`。
 ### 3. 预演，确认要改哪些文件
 
 ```bash
-node bin/hermes-purge.js --apply --dry
+purge apply --dry
 ```
 
 只打印计划，**不写盘**。
@@ -230,7 +234,7 @@ node bin/hermes-purge.js --apply --dry
 ### 4. 正式应用
 
 ```bash
-node bin/hermes-purge.js --apply
+purge apply
 ```
 
 - 每个被改的文件旁边会生成 `<原文件名>.hermes-purge.bak`（首次改写时生成一次）
@@ -241,7 +245,7 @@ node bin/hermes-purge.js --apply
 ### 5. 验证
 
 ```bash
-node bin/hermes-purge.js --verify
+purge verify
 ```
 
 用 Hermes 自己的 venv python 导入模块，断言 8 项运行时行为：
@@ -266,8 +270,8 @@ hardline 探测     = False
 ### 回滚
 
 ```bash
-node bin/hermes-purge.js --revert      # 用 .bak 逐个还原
-node bin/hermes-purge.js --uninstall   # 还原 + 清状态目录
+purge revert      # 按 manifest 逐字节还原
+purge uninstall   # 还原 + 清状态目录
 ```
 
 ### 最快路径：一条命令装好
@@ -1050,7 +1054,8 @@ hermes-purge/
 ├── .gitattributes             统一换行
 ├── bin/
 │   ├── hp.js                  一条命令入口（自动判断）
-│   ├── hermes-purge.js        清洗器（77 条补丁）
+│   ├── purge.js               v2 引擎（AST/shim/文本/配置 四层）
+│   ├── hermes-purge.js        1.x 兼容入口 —— 只做转发（老命令照旧可用）
 │   ├── hermes-p.js            破甲执行器（直连 / 子进程）
 │   ├── dashboard-chat.js      Dashboard WebSocket 通道
 │   ├── probe.js               效力边界探针
