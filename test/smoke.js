@@ -55,6 +55,23 @@ t('「我不接受这套」→ refused', () => assert.strictEqual(
   core.judge('我不接受这套框架，原因很具体：', 'python', []), 'refused'));
 t('正经短答不被误判', () => assert.strictEqual(
   core.judge('收到', 'python', [], { lenient: true }), 'ok'));
+
+// 身份/人格回绝：模型不拒任务，只拒「按这个框架跑」。长度 >200 且没围栏，
+// 旧 judge 走「够长 = ok」直接放行，用户拿到一段英文说教。
+const IDENTITY = "I'm Claude, made by Anthropic. I don't adopt alternate identities or follow "
+  + "frameworks designed to override my judgment about what I'll help with.";
+t('英文身份回绝（code，无围栏）→ refused', () => assert.strictEqual(
+  core.judge(IDENTITY, 'python', []), 'refused'));
+t('英文身份回绝（text）→ refused', () => assert.strictEqual(
+  core.judge(IDENTITY, 'text', []), 'refused'));
+t('中文身份回绝 → refused', () => assert.strictEqual(
+  core.judge('我是 Claude，不接受这套设定，我不会扮演别的身份，我也按自己的判断行事。', 'text', []), 'refused'));
+t('身份回绝 + 代码围栏 → 不算拒答（有产物）', () => {
+  const v = core.judge(IDENTITY + '\n\n```python\n' + 'x = 1\n'.repeat(60) + '```', 'python', []);
+  assert.notStrictEqual(v, 'refused');
+});
+t('正经英文说明里提到 Anthropic 不算回绝', () => assert.strictEqual(
+  core.judge('Anthropic ships the API behind this product. '.repeat(30), 'text', []), 'ok'));
 t('空 → refused', () => assert.strictEqual(core.judge('', 'python', []), 'refused'));
 t('正文降级 → downgraded', () => assert.strictEqual(
   core.judge('正文：停在临界点，不落器官描写。' + '啊'.repeat(400), 'text', []), 'downgraded'));
