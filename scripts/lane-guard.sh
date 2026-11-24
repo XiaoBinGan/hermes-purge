@@ -22,9 +22,13 @@ say "泳道护栏（$LANE）"
 # 1) 本泳道不能碰对方的锚点文件
 other="lib/anchors/hermes-win.js"
 [ "$LANE" = "lane/win" ] && other="lib/anchors/hermes-0.21.0.js"
-touched="$(git log --oneline "origin/main..$LANE" -- "$other" | head -5 || true)"
-if [ -z "$touched" ]; then ok "没碰过对方的锚点文件（$other）"
-else bad "本泳道改过 $other："; printf '%s\n' "$touched"; fi
+# 判据用「内容是否与 main 一致」而不是「历史里有没有提交」——
+# 合并 main 时也会带上该文件的历史，按历史判会误报（实测过一次）。
+if git diff --quiet "origin/main" "$LANE" -- "$other"; then
+  ok "没改过对方的锚点文件（$other 与 main 一致）"
+else
+  bad "本泳道改了 $other（与 main 不一致），应还原：git checkout origin/main -- $other"
+fi
 
 # 2) main 必须有分支保护（直推会被服务端拒绝）
 if command -v gh >/dev/null 2>&1; then
