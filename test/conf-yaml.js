@@ -28,10 +28,16 @@ function makeTree(configYaml) {
   fs.writeFileSync(path.join(home, '.env'), '');
   fs.writeFileSync(path.join(home, 'SOUL.md'), '# soul\n');
   fs.writeFileSync(path.join(tree, 'SOUL.md'), '# soul\n');
+  // shim 层要往 site-packages 写 .pth；没有它就报 no-site-packages，
+  // 而 apply 现在把 shim 失败计入 failed 并置非零退出码（issue #15 要求），
+  // 所以夹具要像个真宿主：给一个 site-packages。
+  fs.mkdirSync(path.join(tree, 'venv', 'Lib', 'site-packages'), { recursive: true });
+  fs.mkdirSync(path.join(tree, 'venv', 'bin'), { recursive: true });
+  fs.mkdirSync(path.join(tree, 'venv', 'lib', 'python3.11', 'site-packages'), { recursive: true });
   return { home, tree };
 }
 
-const apply = (tree) => spawnSync(process.execPath, [CLI, 'apply', '--target=' + tree], { encoding: 'utf8' });
+const apply = (tree) => spawnSync(process.execPath, [CLI, 'apply', '--target=' + tree, '--no-verify'], { encoding: 'utf8' });
 const readCfg = (home) => fs.readFileSync(path.join(home, 'config.yaml'), 'utf8');
 
 console.log('\n配置层（config.yaml）');

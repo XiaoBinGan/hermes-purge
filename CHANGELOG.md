@@ -1,5 +1,37 @@
 # Changelog
 
+## 3.7.1 —— 支持 pm 安装布局；shim 失败不再假装成功（issue #15 / #1）
+
+issue #15 报的是两个症状、一个原因：pm 装的 Hermes 把**代码根和 venv 分开放**（
+`hermes-agent` 与 `installs/<id>/environments/<hash>/venv`），而 `platform.js` 只认 co-located 布局 ——
+于是 `findPython()` 返回 null（verify 直接短路）、`sitePackages()` 返回 `[]`（shim 恒报 `no-site-packages`）。
+
+### 修法
+
+1. **认 pm 布局**：新增 `pmHomeFor / pmVenvsFor`，从 hermes home 的 `installs/<id>/facts.json` 读
+   `packages.venv.environment`，读不到就兜底扫 `environments/*/venv`。只在该代码根**确实位于某个
+   hermes home 之下**时才扫（`HERMES_HOME` / `%LOCALAPPDATA%\hermes` / `~/.hermes`），
+   否则临时目录里的测试会被真机 venv 污染。
+2. **`sitePackages(root, py)` 读 py**：issue 点名「PY 指对了也不读 PY」，现在 co-located → py 推导 → pm 兜底，
+   三级依次降级。shim 的 install/uninstall/probe、事务的 revert、doctor 全部把 `py` 传下去。
+3. **shim 失败不再静默**：`apply` 里 shim 未注入会计入 `failed` 并**退出码 1**，提示行直说
+   「该层 cap 只走 AST/文本」。以前 64 条算成功、退出码 0，把整层没落藏了。
+4. **C20 自带 os**（issue #1）：注入块改成 `__import__("os")`，不再依赖 C20b 是否落地；
+   C20b 的锚点从 `import json\nfrom typing import Any\n` 放宽到 `import json\n` ——
+   各版本 import 块顺序不同（用户那份是 hashlib / json / re / string / typing），旧锚点永远 drifted。
+
+### 验证
+
+```
+pm 布局（LOCALAPPDATA 模拟）：
+  apply exit = 0   .pth 落进 pm venv = true   shim 脚本落进 pm venv = true
+pm 布局（HERMES_HOME 模拟）：status python = <installs>/.../venv/Scripts/python.exe
+完全没有 venv：
+  apply exit = 1   ✖ shim 未注入：no-site-packages（该层 cap 只走 AST/文本）
+C20b 在 hashlib/json/re/string/typing 的 import 块上：pending → applied，幂等
+```
+
+新增 4 个用例：pm 布局发现（facts.json / 兜底 / py 直传）、非 hermes home 不误认、C20b 异序 import、C20 自足。
 ## 3.7.0 —— 第五轮：压缩时被砍的内容 + 脱敏深度 + 冷却（71 → 77 条）
 
 这轮盯的是「不报错、也不拒绝，但内容被悄悄截断」的地方。这类最难发现：`purge status` 全绿、

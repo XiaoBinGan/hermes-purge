@@ -473,9 +473,17 @@ function cmdApply() {
     if (!dry) {
       ctx.shimEntries = ADAPTER.collectShim(CAPS);
       if (ctx.shimEntries.length) {
-        const res = ADAPTER.installShim(TARGET, ctx.shimEntries);
-        console.log('\n  ' + (res.ok ? paint('✔', C.g) : paint('✖', C.r)) + ' shim ' +
-          (res.ok ? res.entries + ' 条 · ' + res.written.length + ' 个文件' : res.reason));
+        const res = ADAPTER.installShim(TARGET, ctx.shimEntries, { py: ctx.py });
+        if (res.ok) {
+          console.log('\n  ' + paint('✔', C.g) + ' shim ' + res.entries + ' 条 · ' + res.written.length + ' 个文件');
+        } else {
+          // 以前 shim 失败只打印一行、退出码仍 0，看着像「全部成功」——
+          // issue #15：64 条算成功，掩盖了整层没落。现在计入 failed 并置非零。
+          failed++;
+          process.exitCode = 1;
+          console.log('\n  ' + paint('✖', C.r) + ' shim 未注入：' + res.reason +
+            C.dim + '（该层 cap 只走 AST/文本；见 purge doctor）' + C.reset);
+        }
       }
     }
   } catch (e) {
@@ -542,7 +550,7 @@ function cmdRevert() {
   // 顺序很重要：事务管着的 shim 文件交给 revert（它要校验哈希），
   // 只有「不在任何快照里」的残留 shim 才在这里直接删。
   const covered = txn.coveredPaths(TARGET, { id: args.id });
-  const r0 = ADAPTER.uninstallShim ? ADAPTER.uninstallShim(TARGET, { skip: covered }) : { removed: [] };
+  const r0 = ADAPTER.uninstallShim ? ADAPTER.uninstallShim(TARGET, { skip: covered, py: ctx.py }) : { removed: [] };
   if (r0.removed.length) console.log('已移除 shim：' + r0.removed.length + ' 个文件');
   const r = txn.revert(TARGET, { force: !!args.force, id: args.id });
   if (!r.ok) {
@@ -626,7 +634,7 @@ function cmdPlugin() {
 function buildReportHtml() {
   const report = require('../lib/v2/report');
   const rows = collectRows();
-  const doctorOpts = ADAPTER.doctorOpts ? ADAPTER.doctorOpts(TARGET) : undefined;
+  const doctorOpts = Object.assign({}, (ADAPTER.doctorOpts ? ADAPTER.doctorOpts(TARGET) : undefined) || {}, { py });
   const doc = txn.doctor(TARGET, doctorOpts);
   const st = metrics.stats(TARGET, {});
   const audit = txn.readAudit ? txn.readAudit(TARGET, 15) : [];
@@ -891,7 +899,7 @@ function cmdDesktop() {
 }
 
 function cmdDoctor() {
-  const opts = ADAPTER.doctorOpts ? ADAPTER.doctorOpts(TARGET) : undefined;
+  const opts = Object.assign({}, (ADAPTER.doctorOpts ? ADAPTER.doctorOpts(TARGET) : undefined) || {}, { py });
   const rep = txn.doctor(TARGET, opts);
   console.log(C.b + 'doctor' + C.reset + '  target=' + TARGET + '\n');
   for (const c of rep.checks) {
