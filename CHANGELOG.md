@@ -1,5 +1,18 @@
 # Changelog
 
+## 3.7.2 —— README 对齐现实（纯文档）
+
+3.7.x 连续改了几轮之后 README 有几处停在过去：
+
+- `purge status` 示例还写 `caps 31 · applied 31`、快速上手写「31/31 生效」、幂等示例写「跳过 31」→ 统一到 **77**
+- 「跨平台」一节说 venv **两套**布局 → 现在是**三套**（多了 pm 装法 `installs/<id>/environments/<hash>/venv`）
+- 故障表补两条：`python=(无)` 增加 pm 布局说明；新增 `✖ shim 未注入：no-site-packages`（并说明 3.7.1 起计入 `failed`、退出码 1）
+- `apply` 一节补**退出码语义**：`0` 全部落地 / `1` 有 cap 落不下去**或 shim 写不进去**，不再有「shim 失败但退出 0」的假绿
+- 通道优先级写清楚：**dashboard → `hermes -z` → 直连**，直连会丢 C18 重采样 / C20 温度 / C16 tail-prefill，`hp` 会在 stderr 明说
+- 判定层补「**身份回绝 ≠ 成功**」（3.6.1 真机踩到的那类英文立场声明）
+- 泳道说明补 `lane/win-merge`；兼容矩阵与实测表里 31 条时代的数字标注「历史数据」
+
+`npm test` 全绿；README 里「当前版本」与 `package.json` 的一致性断言也过。
 ## 3.7.1 —— 支持 pm 安装布局；shim 失败不再假装成功（issue #15 / #1）
 
 issue #15 报的是两个症状、一个原因：pm 装的 Hermes 把**代码根和 venv 分开放**（

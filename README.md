@@ -4,7 +4,7 @@
 让模型被拒时自动重采样。77 条能力、四层落地（AST / 运行时 shim / 文本 / 配置）、
 改坏了能逐字节回滚。
 
-**一条命令安装，一条命令撤销。** 当前版本 **3.7.1** · 零依赖 · Node ≥18 · macOS + Windows 实测。
+**一条命令安装，一条命令撤销。** 当前版本 **3.7.2** · 零依赖 · Node ≥18 · macOS + Windows 实测。
 
 > 借鉴了 [dsh-purge](https://github.com/YuJunZhiXue/dsh-purge) 的一个判断（「不跟模型讲道理，直接改宿主」），
 > 但引擎、补丁清单、验证方式、CLI 都是为 Hermes 独立写的 —— 没有一行共享代码。逐条对账见下文「我们比它强在哪」。
@@ -73,7 +73,7 @@ powershell -ExecutionPolicy Bypass -File $env:TEMP\hp-install.ps1 -Setup -Yes
 ### 3. 确认它在生效
 
 ```bash
-purge status          # 31/31 生效 就对了
+purge status          # 77/77 生效 就对了
 ```
 
 三个「看得见」的地方：
@@ -106,7 +106,8 @@ purge parity --diff=mac.json     # 在另一台机器上比对，一致返回 0�
 | 症状 | 处理 |
 |---|---|
 | `找不到 config.yaml` / `EHP_CONFIG` | 用 `--home=` 指到配置根：`purge status --home=$HOME/.hermes`（Windows：`--home=%USERPROFILE%\.hermes`） |
-| `python=(无)` | 宿主 venv 没找到：AST/shim 两层会降级成文本层，仍可用但抗升级能力差一档 |
+| `python=(无)` | 宿主 venv 没找到：AST/shim 两层会降级成文本层，仍可用但抗升级能力差一档。3.7.1 起会顺带认 **pm 装法**（代码根在 `hermes-agent`，venv 在 `installs/<id>/environments/<hash>/venv`），这种布局不会再报空 |
+| `✖ shim 未注入：no-site-packages` | 整棵树上找不到宿主 venv。3.7.1 起这行会计入 `failed` 并让 `apply` 退出码变 1（以前是「全绿 + 退出 0」的假象）；先确认 `purge status` 那行的 `python=` 有没有值 |
 | 面板按钮报 `401` / `控制服务没响应` | 先起控制服务：`purge serve`（只监听 127.0.0.1:9123，带 token） |
 | Windows 上 `Cannot find module 'G:\????...'` | 3.1.4 已修：旧版 `install.ps1` 把中文安装路径按 ASCII 写进 `.cmd`。重跑最新 `install.ps1`（会用 `%~dp0` 启动器 + UTF-8 路径文件）即可 |
 
@@ -116,7 +117,7 @@ purge parity --diff=mac.json     # 在另一台机器上比对，一致返回 0�
 
 > **两条泳道并行**：macOS 与 Windows 各自维护自己的锚点文件与分支，互不覆盖。
 > `main` 已开分支保护（必须走 PR，直推会被拒绝）；规则见 [`docs/lanes.md`](docs/lanes.md)
-> （分支 `lane/mac` / `lane/win`，`main` 只做集成）。
+> （分支 `lane/mac` / `lane/win` / `lane/win-merge`，`main` 只做集成；`lane/win*` 两个分支跟 `main` 同一个提交）。
 
 ## 它到底改了什么（30 秒版）
 
@@ -171,7 +172,11 @@ Hermes Agent 有若干层「不让你做某件事」的机制。这个工具把�
 | 配置 | `approvals.mode=off`、`model.max_tokens`、prefill 文件、`.env` 注入 |
 | 代码 | 审批门、审批模式、编辑确认、循环护栏、命令黑名单、系统提示词注入位置、prefill 位置 |
 
-**破甲执行器**：`hp` 一条命令。自动判断语言与模式，被拒自动重试，走三条通道之一。
+**破甲执行器**：`hp` 一条命令。自动判断语言与模式，被拒自动重试，走三条通道之一 ——
+按 **dashboard（JSON-RPC/WS，9119）→ `hermes -z`（shim 生效）→ 直连 chat/completions** 顺序挑活着的：
+前两条下 shim 里的 C18 拒答重采样、C20 温度、C16 tail-prefill 全都在线；
+**直连会丢掉这三样**（只能在 HTTP 层重发），所以降级时 `hp` 会在 stderr 明说一句，
+而不是让你以为「重试了但没效果」。
 
 **边界探针**：跑数据量化「哪些类重试能过、哪些类恒定是 0」，而不是靠感觉。
 
@@ -229,8 +234,9 @@ node bin/hermes-purge.js --apply
 ```
 
 - 每个被改的文件旁边会生成 `<原文件名>.hermes-purge.bak`（首次改写时生成一次）
-- 幂等：重复执行不会重复改，第二次会显示「改写 0 · 跳过 31」
+- 幂等：重复执行不会重复改，第二次会显示「改写 0 · 跳过 77」
 - 状态记录在 `<目标目录>/.hermes-purge/state.json`
+- 退出码：`0` 全部落地；`1` 有 cap 落在所有实现之外，**或 shim 层写不进去**（找不到宿主 venv / site-packages 不可写）。3.7.1 起不再出现「shim 失败但退出 0」的假绿
 
 ### 5. 验证
 
@@ -321,10 +327,12 @@ node bin/purge.js status --target="$HOME/.hermes/hermes-agent"
 
 ```
 purge v2  target=/Users/you/.hermes/hermes-agent
-python=/Users/you/.hermes/hermes-agent/venv/bin/python  ·  caps 31  ·  applied 31  pending 0  drifted 0
+python=/Users/you/.hermes/hermes-agent/venv/bin/python  ·  caps 77  ·  applied 77  pending 0  drifted 0
 ```
 
 `python=` 这行是空的，说明宿主 venv 没找到 —— AST / shim 两层都落不了，只剩文本层能改（`purge doctor` 会把「宿主 python」单列成一项）。
+
+找 venv 的顺序是三级：代码根下的 `venv` / `.venv` → 传进来的 `PY` 推导出的 venv → pm 装法的 `installs/<id>/…/venv`（读 `facts.json` 的 `packages.venv.environment`，读不到就扫 `environments/*/venv`）。三级都没有才真的算「没找到」。
 
 #### 方式一：clone 后直接跑
 
@@ -434,12 +442,16 @@ npm rm -g hermes-purge
 
 | Hermes 版本 | 落地路径 | macOS | Windows |
 |---|---|---|---|
-| 0.21.0 | 主锚不成立，走 **18 条变体** | **已实测** —— `~/.hermes/hermes-agent`，宿主 python 3.11；`status` applied 31 / pending 0 / drifted 0，`doctor` 健康，L2 14 项全绿 | **未实测** |
+| 0.21.0 | 主锚不成立，走 **18 条变体** | **已实测** —— `~/.hermes/hermes-agent`，宿主 python 3.11；`status` applied 31 / pending 0 / drifted 0（当时 cap 数为 31，现为 77），`doctor` 健康，L2 14 项全绿 | **未实测** |
 | 0.21.3 | 主锚，0 处变体 | **未实测** | **已实测** —— CRLF 树闭环；另在 **Win11 ARM 真机**上跑通补丁层工具链（见下） |
 | 0.21.4 | 主锚，0 处变体 | **未实测** | **已实测** —— 沙箱（pristine `git archive` + 最小 config）上 `31/31 applied`、L1 14 项 + L2 14 项通过、`revert` 代码逐字节还原 |
 | 0.21.5 | 主锚，0 处变体 | **未实测** | **已实测** —— 上游 tag `abandoned-rc.10-v0.21.5` 的 pristine 树：`31/31 applied`、L1 14 项通过、`revert` 代码逐字节还原；L2 因沙箱缺 `ruamel.yaml` 未跑（环境限制，非补丁问题） |
 | 0.21.6 | 主锚，0 处变体 | **未实测** | **已实测** —— 上游 tag `abandoned-rc.1-v0.21.6` 的 pristine 树：`31 pending · 0 drifted` → `apply` 后 `31/31`、L1 14 项通过、`revert` 逐字节还原；L2 同因缺 `ruamel.yaml` 未跑 |
 | 0.21.7 | 主锚，0 处变体 | **未实测** | **已实测** —— 上游 tag `abandoned-rc.1-v0.21.7` 的 pristine 树：`31 pending · 0 drifted` → `apply` 后 `31/31`、L1 14 项通过、`revert` 逐字节还原；config/.env 改写正确（mode→off、timeout→86400、.env 值就地改） |
+
+> 上面几行的数字是当时补丁面还是 31 条时记的；现在补丁面已扩到 77 条，
+> 0.21.4/0.21.5 沙箱最新复跑结果为 `applied 72 · drifted 0`。
+
 
 - **0.21.0 为什么走变体**：0.21.2/0.21.3 才做的模块拆分（`approval_context` / `approval_detection` / `turn_stop_gates` / `stream_delivery` / `turn_request_assembly`）。0.21.0 里这些函数还在 `tools/approval.py`、`agent/conversation_loop.py`、`run_agent.py`。走变体的 18 条：C04 C05 C06 C11 C12 C13 C14 C16 C18 C18b C18c C18d C19b C19c C19d C19e C20 C20b。
 - **0.21.3+ 为什么不用变体**：主锚直接命中。`--status`（1.x）里一条 `[0.21.0]` 标记都不该出现。
@@ -844,8 +856,9 @@ Windows 语义下的三个必踩坑，都已用 CRLF 树实测修掉：
 
 1. `_ast.py` 对 CRLF 文件插行会写出 `\r\r\n` → 文件损坏
 2. 文本锚点按 LF 写的，CRLF 文件会全量 `drifted` → 现在一律在 **LF 视图上匹配改写**，落盘按原 eol 还原
-3. venv 布局两套：`venv/bin/python` + `lib/pythonX.Y/site-packages`（POSIX）与
-   `venv/Scripts/python.exe` + `Lib/site-packages`（Windows），`platform.js` 两套都认
+3. venv 布局三套：`venv/bin/python` + `lib/pythonX.Y/site-packages`（POSIX）、
+   `venv/Scripts/python.exe` + `Lib/site-packages`（Windows）、
+   以及 pm 装法的 `installs/<id>/environments/<hash>/venv`（代码根与 venv 分离，`platform.js` 三套都认）
 
 ## 我们比 dsh-purge 强在哪
 
@@ -856,12 +869,12 @@ Windows 语义下的三个必踩坑，都已用 CRLF 树实测修掉：
 | 维度 | dsh-purge 1.1.71 | 本项目 2.0 | 怎么验 |
 |---|---|---|---|
 | 落地形态 | 一份实现：补丁 + 自身插件 shim | **四层可互换**：AST（符号级）→ shim（运行时）→ 文本 → 配置，一条失效自动降级 | `purge status` 逐条显示走哪层 |
-| 版本韧性 | 锁 dsh 0.2，升版整批失效 | 0.21.0 与 0.21.3/0.21.4 **两套布局都 31/31**；安全核心 C01–C12 有 AST + shim 双路径 | 本仓库实测 |
+| 版本韧性 | 锁 dsh 0.2，升版整批失效 | 0.21.0 与 0.21.3/0.21.4 **两套布局都 77/77**；安全核心 C01–C12 有 AST + shim 双路径 | 本仓库实测 |
 | 源码改不动时 | 依赖自身插件生命周期 | **pristine 树只装 shim**，源码一字节未改，运行时已是 `_YOLO_MODE_FROZEN=True` / `detect_hardline_command()=(False,'')` | 按 README「v2」一节复现 |
 | 回滚 | 单份 `.bak`，二次 apply 覆盖原始备份 | 快照多版本 + before/after **双哈希** + 手改拒绝覆盖 + 撤销栈（LIFO） | `test/v2.js` 里有对应用例 |
 | 生效证明 | 重启后目视 | L1 `py_compile`/YAML → L2 **14 条行为断言** → L3 端到端 | `purge verify --level=2` |
 | 观测 | 无 | `metrics.jsonl` + `purge stats`：轮次 / 拒答收敛 / 重采样均值 / cap 命中 / tokens 成本（shim 的 turn 钩子每轮写一条） | `purge stats` |
-| 平台 | 未注明 | macOS + Windows 都实测；CRLF 三个坑（AST 插行写坏文件、锚点 LF 匹配不上、venv 双布局）已修并由 CRLF 树闭环验证 | `test/v2.js --e2e <CRLF 树>` |
+| 平台 | 未注明 | macOS + Windows 都实测；CRLF 三个坑（AST 插行写坏文件、锚点 LF 匹配不上、venv 多布局）已修，并覆盖 pm 装法（代码根与 venv 分离）| `test/v2.js --e2e <CRLF 树>` |
 | 宿主绑定 | 绑死 DSH | **adapter 注册表**：cap 只描述行为，落地层不认识宿主；Hermes（实测）+ DSH（规格验证）两个 adapter 并存 | `lib/v2/adapters.js` |
 | 规模思路 | 88 条 patch（同一行为常有多种表述） | Hermes 77 条 cap、DSH 40 条 cap（由 88 条按行为收敛），每条带断言；不做条数竞赛 | `purge status` 的 `cap` 列 |
 
@@ -917,7 +930,7 @@ Windows 语义下的三个必踩坑，都已用 CRLF 树实测修掉：
 | 项 | 0.21.0（macOS，`~/.hermes/hermes-agent`） | 0.21.3/0.21.4（Windows 布局） |
 |---|---|---|
 | `--status` | applied 2 / pending 29 / drifted **0** / missing **0** | 同上，且 0 处使用变体 |
-| `--apply` | 改写 29 · 未命中 0；二次执行改写 0 · 跳过 31 | 改写 30 · 未命中 0 |
+| `--apply` | 改写 29 · 未命中 0；二次执行改写 0 · 跳过 31（历史数据，31 条时代）| 改写 30 · 未命中 0（同上；当前 77 条时代二次执行为「改写 0 · 跳过 77」）|
 | `py_compile` | 7 个文件全过 | 12 个文件全过 |
 | 运行时断言 | 8/8 绿（另加 `cron_ctx=False`） | 8/8 绿 |
 | 拒答重采样单测 | `test/c18_unit_0210.py` 15/15 | `test/c18_unit.py` 11/11 |
@@ -1018,6 +1031,13 @@ Hermes 是**带工具**的 agent。它拒掉正文、或正文为空，代码仍
 
 **判定必须同时看聊天正文和磁盘产物。** `probe.js` 目前只看正文，这是已知局限 ——
 用它做相对比较可靠，做绝对结论不可靠。
+
+### 身份回绝 ≠ 成功
+
+模型可以「不拒任务、只拒框架」：`I'm Claude, made by Anthropic. I don't adopt alternate identities…`。
+这类回答有 400+ 字、没有代码围栏，按「够长 = 成功」判就会**把立场声明当产物**输出，重采样一次都不触发（3.6.1 真机上踩到）。
+现在它走独立的 `IDENTITY_REFUSAL` 判定：不分语言、不看开头，命中且**无代码围栏**即判 `refused` 重采样；
+带围栏的不算（那是给了产物再表态）。
 
 ### `EMPTY` 不等于拒绝
 
