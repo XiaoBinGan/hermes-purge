@@ -117,6 +117,7 @@ const CAP_NAME = {
   C47: 'terminal.guard.foreground_nudge_off',
   C48: 'compaction.lean_user_chars', C49: 'compaction.salvage_chars', C50: 'redact.walk_depth',
   C51: 'fs.nt_namespace_off', C52: 'approval.wmic_depth', C53: 'failover.no_reset_defer',
+  C54: 'refusal.image_class',
   G04: 'config.terminal_budget', G05: 'config.loop_guardrails_off', G06: 'config.context_file_cap',
   G07: 'config.delegation_budget', G08: 'config.compression_deferred', G09: 'config.update_check_off',
   C15: 'budget.max_tokens', C17: 'prompt.prefill_file',
