@@ -32,6 +32,9 @@
 | `package.json` 的 `version` | 仅集成方 | 泳道分支里**不要**改版本号，避免每次发布必冲突 |
 | `CHANGELOG.md` | 两侧都写，但**只往自己的小节追加** | 冲突时优先保留两边内容 |
 | `test/*` | 各加各的新文件 | 修改既有测试前先在 issue/PR 里说一声 |
+| `README.md` 的「版本兼容」矩阵 | **仅 mac 泳道** | 逐版本实测记录由 mac 维护（它手上有 0.21.0/4/5/6/7 全套样本）；win 侧要补就只加自己那一行 |
+| README 其他章节 / `CHANGELOG.md` | 各自追加小节 | 冲突时两边都保留 |
+| `docs/windows-verification.md`、`install.ps1` 相关说明 | **仅 win 泳道** | 实机验证记录归它 |
 
 `lib/patches.js` 现在是这么装载的（只是读，不用改）：
 
@@ -65,6 +68,20 @@ module.exports = { label, map: {
 要求：`find` 带真实缩进（文本层在 LF 视图匹配、写回恢复原 EOL），`to` 缩进一致且保留
 `[hermes-purge]` 标记；不确定先 `purge apply --dry`。
 
+## 护栏自检
+
+```bash
+scripts/lane-guard.sh              # 默认查 lane/mac
+scripts/lane-guard.sh --lane=lane/win
+```
+
+检查四件事，任何红项非 0 退出：
+
+1. 本泳道有没有改过**对方**的锚点文件（`lane/mac` 不许碰 `lib/anchors/hermes-win.js`，反之亦然）
+2. `main` 的分支保护是否还在（必须走 PR、管理员同样受限）
+3. 本地 `main` 与 `origin/main` 是否一致（防止有人本地直推）
+4. `lane/*` 合进 `main` 会不会冲突（`git merge-tree` 干跑，不落地）
+
 ## 同步方式
 
 ```bash
@@ -78,3 +95,12 @@ git push origin lane/win
 ```
 
 `rebase` 到 `main` 时如果碰到 `CHANGELOG.md` 冲突：两边内容都保留，只是顺序不同。
+
+## 为什么要把文档也分归属
+
+2026-11-24 一天之内，README 的兼容矩阵连续冲突三次：win 侧把 mac 写的
+0.21.5/0.21.6/0.21.7 三行合并成一行 0.21.4（它那时手上没有这些样本），
+每次合并都要人工裁决「保留谁的」。
+
+代码层面早就靠 `lib/anchors/*` 拆文件做到了零冲突，文档没做，所以这里是最后的冲突源。
+上表把矩阵划给 mac、把 Windows 实机记录划给 win，就是为了让文档也不再打架。

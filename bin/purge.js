@@ -62,6 +62,7 @@ function usageText() {
     '  purge desktop [install|sync|uninstall|status]  在桌面端侧边栏加一个「hermes-purge 状态」入口',
     '  purge parity [--out=F] [--diff=F]  导出/对比两台机器的「效果指纹」（mac ↔ win 对账用）',
     '  purge serve [--port=9123]    起本地控制服务，让面板上的「启用/停用/体检/刷新」按钮可用',
+    '  purge agent [install|status|restart|uninstall]  macOS 开机自启（launchd），让控制服务常驻',
     '  purge stats [--json] [--since=ISO]  观测：轮次、拒答收敛、cap 命中、成本',
     '',
     '  --target=DIR   指定宿主目录（默认自动探测，或 HERMES_HOME / DSH_HOME）',
@@ -152,6 +153,34 @@ try {
 
 /* ───────────── 实现选择 ───────────── */
 
+/* 宿主版本（用于判断「这条 cap 要求的机制在这个版本里有没有」） */
+function hostVersion() {
+  try {
+    const pj = fs.readFileSync(path.join(TARGET, 'pyproject.toml'), 'utf8');
+    const m = pj.match(/^version\s*=\s*["']([0-9][^"']*)["']/m);
+    if (m) return m[1];
+  } catch (e) { /* 继续 */ }
+  try {
+    const hc = fs.readFileSync(path.join(TARGET, 'hermes_constants.py'), 'utf8');
+    const m = hc.match(/__version__\s*=\s*["']([0-9][^"']*)["']/);
+    if (m) return m[1];
+  } catch (e) { /* 继续 */ }
+  return null;
+}
+
+const HOST_VER = hostVersion();
+
+function verLt(a, b) {
+  const pa = String(a).split('.').map(Number);
+  const pb = String(b).split('.').map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const x = pa[i] || 0;
+    const y = pb[i] || 0;
+    if (x !== y) return x < y;
+  }
+  return false;
+}
+
 function probeChain(cap) {
   const tried = [];
   const only = args.impl ? String(args.impl) : null;
@@ -175,6 +204,37 @@ function probeChain(cap) {
       }
     }
   }
+  // 「所有实现都不可用」分两种：文件/符号根本不存在（老版本没这个机制）与真的漂移。
+  // 前者不该报警——0.21.0 上没有 C26/C27 所在模块是正常的。
+  // 判据：所有尝试要么「文件不存在」要么「符号不存在」，且至少有一处文件缺失
+  // → 这台宿主确实没有该机制（老版本），不是漂移。
+  const numMissing = tried.filter((t) => t.endsWith(':missing')).length;
+  // 只对 hermes 生效：dsh 那边的夹具把「文件不存在」如实算作 drifted，不能改语义
+  const onlyGaps = ctx.adapter === 'hermes' && tried.length > 0
+    && tried.every((t) => t.endsWith(':missing') || t.endsWith(':drifted'))
+    && numMissing > 0;
+  if (onlyGaps) {
+    return { impl: null, status: 'unsupported', detail: '本机宿主没有该机制所在文件（版本较老），非漂移', kind: null, tried };
+  }
+  // 排在最后：真的什么都没命中，再看是不是版本太老。
+  // 注意 0.0.0 是上游 rc/archive 树的占位版本，不能拿来判定。
+  const realVer = HOST_VER && HOST_VER !== '0.0.0' ? HOST_VER : null;
+  if (ctx.adapter === 'hermes' && cap && cap.since) {
+    if (realVer && verLt(realVer, cap.since)) {
+      return {
+        impl: null, status: 'unsupported', kind: null, tried,
+        detail: '宿主 ' + realVer + ' 没有该机制（需要 ≥' + cap.since + '），非漂移',
+      };
+    }
+    // 版本读不出来（rc/archive 树是 0.0.0）：既然这条 cap 已声明「需要某版本才有」，
+    // 而所有实现都没命中，就按「本机没有此机制」归类，而不是报漂移。
+    if (!realVer) {
+      return {
+        impl: null, status: 'unsupported', kind: null, tried,
+        detail: '本机未声明版本，且该机制在此宿主不存在（需 ≥' + cap.since + '），非漂移',
+      };
+    }
+  }
   return { impl: null, status: 'drifted', detail: '所有实现都不可用', kind: null, tried };
 }
 ctx.probe = probeChain;
@@ -194,11 +254,19 @@ function collectRows() {
 function paritySnapshot() {
   const rows = collectRows();
   // 只留「效果」：谁生效了、走的哪层。不带路径、python、耗时 —— 两台机器必然不同
+  const layers = {};
+  for (const r of rows) {
+    const l = r.layer || 'unknown';
+    layers[l] = layers[l] || { total: 0, applied: 0 };
+    layers[l].total++;
+    if (r.status === 'applied') layers[l].applied++;
+  }
   return {
-    schema: 1,
+    schema: 2,
     version: pkgVersion(),
     adapter: ADAPTER.id,
-    caps: rows.map((r) => ({ id: r.id, cap: r.cap, status: r.status, impl: r.impl })),
+    caps: rows.map((r) => ({ id: r.id, cap: r.cap, layer: r.layer, status: r.status, impl: r.impl })),
+    layers,
     summary: {
       total: rows.length,
       applied: rows.filter((r) => r.status === 'applied').length,
@@ -230,6 +298,30 @@ function cmdParity() {
       console.log('两边效果一致：' + snap.caps.length + ' 条 cap 的 status 与实现层完全相同');
       console.log(paint('（对端 ' + (other.version || '?') + ' / ' + (other.adapter || '?') + '，本机 ' + snap.version + ' / ' + snap.adapter + '）', C.dim));
       return;
+    }
+    // 先给「哪一层对不上」的粗结论，再逐条列细节
+    const layerOf = (id) => {
+      const a = theirs.get(id) || mine.get(id) || {};
+      return a.layer || 'unknown';
+    };
+    const byLayer = {};
+    for (const d of diffs) {
+      const l = layerOf(d.id);
+      byLayer[l] = byLayer[l] || [];
+      byLayer[l].push(d.id);
+    }
+    const localLayers = snap.layers || {};
+    const remoteLayers = other.layers || {};
+    const layerNames = [...new Set([...Object.keys(localLayers), ...Object.keys(remoteLayers), ...Object.keys(byLayer)])].sort();
+    console.log(paint('按层对比', C.b));
+    for (const l of layerNames) {
+      const loc = localLayers[l] || { total: 0, applied: 0 };
+      const rem = remoteLayers[l] || { total: 0, applied: 0 };
+      const bad = byLayer[l] || [];
+      const flag = bad.length ? paint('✖', C.r) : paint('✔', C.g);
+      const tail = bad.length ? '  缺/异: ' + bad.join(' ') : '';
+      console.log('  ' + flag + ' ' + String(l).padEnd(7) + ' 本机 ' + loc.applied + '/' + loc.total +
+        ' · 对端 ' + rem.applied + '/' + rem.total + tail);
     }
     console.log(paint('发现 ' + diffs.length + ' 处差异', C.y));
     for (const d of diffs) {
@@ -291,6 +383,30 @@ function cmdStatus() {
 function shimRelPaths() {
   const out = ADAPTER.shimRelPaths ? ADAPTER.shimRelPaths(TARGET) : [];
   return out || [];
+}
+
+/* ───────── 面板快照自动刷新 ─────────
+ * 面板里嵌的是一份静态快照，apply/revert 之后不刷新就会显示旧状态。
+ * 这里在状态变化后自动重建（只在面板确实装了的时候，失败也不影响主流程）。
+ */
+function refreshPanelSnapshot(why) {
+  if (args['no-panel-sync']) return;
+  try {
+    const desktop = require('../lib/v2/desktop');
+    const alive = desktop.findDists(TARGET).filter((d) => desktop.status(d).installed);
+    if (!alive.length) return;
+    const { html, generatedAt } = buildReportHtml();
+    const ctl = require('../lib/v2/control').ensureState(TARGET, {});
+    for (const d of alive) {
+      desktop.sync(d, {
+        report: html, version: pkgVersion(), generatedAt,
+        controlPort: ctl.port, controlToken: ctl.token,
+      });
+    }
+    console.log(C.dim + '面板快照已刷新（' + why + '）' + C.reset);
+  } catch (e) {
+    console.log(C.dim + '面板快照刷新跳过：' + e.message + C.reset);
+  }
 }
 
 function cmdApply() {
@@ -398,6 +514,7 @@ function cmdApply() {
       for (const b of bad.slice(0, 5)) console.log('  ' + paint('✖', C.r) + ' ' + b.name + ' ' + b.detail);
     }
     console.log('\n回滚：purge revert   体检：purge doctor');
+    if (changed > 0) refreshPanelSnapshot('apply');
   } else if (dry) {
     console.log('\n（预演，未写盘）' + changed + ' 条可落');
   }
@@ -457,6 +574,7 @@ function cmdRevert() {
     console.log(C.dim + '  要连配置一起回滚：purge revert --force' + C.reset);
   }
   console.log('回滚 ' + r.restored.length + ' 个文件（sha256 已校验）');
+  if (r.restored.length) refreshPanelSnapshot('revert');
   for (const f of r.restored) console.log('  ' + paint('↩', C.y) + ' ' + f);
   metrics.record(TARGET, { event: 'revert', restored: r.restored.length });
 }
@@ -557,7 +675,8 @@ function cmdReport() {
   fs.writeFileSync(out, html, 'utf8');
   console.log('状态报告 → ' + out + '  (' + Math.round(Buffer.byteLength(html) / 1024) + ' KB · ' + generatedAt + ')');
   const by = (x) => rows.filter((r) => r.status === x).length;
-  console.log('  ' + by('applied') + '/' + rows.length + ' 生效 · 待应用 ' + by('pending') + ' · 不可用 ' + by('drifted'));
+  console.log('  ' + by('applied') + '/' + rows.length + ' 生效 · 待应用 ' + by('pending') +
+    ' · 不可用 ' + by('drifted') + (by('unsupported') ? ' · 该版本无此机制 ' + by('unsupported') : ''));
   if (args.open) {
     const cmd = process.platform === 'darwin' ? 'open' : (process.platform === 'win32' ? 'start' : 'xdg-open');
     try {
@@ -570,9 +689,152 @@ function cmdReport() {
 
 /* ───────────── 本地控制服务（给桌面面板的按钮用）───────────── */
 
+/* ───────── 开机自启（macOS launchd）───────── */
+/* Windows 侧对应的是计划任务，由 win 泳道自己实现，这里不写 win32 分支。 */
+
+function cmdAgent() {
+  const agent = require('../lib/v2/agent');
+  const { spawnSync } = require('child_process');
+  const sub = args._[1] || 'status';
+  const port = args.port && args.port !== true ? Number(args.port) : 9123;
+  const file = agent.plistPath();
+  const run = (cmd, argv) => spawnSync(cmd, argv, { encoding: 'utf8' });
+
+  if (process.platform !== 'darwin') {
+    console.log('这个子命令只实现 macOS（launchd）。' + process.platform + ' 上的开机自启由各自泳道实现。');
+    return;
+  }
+
+  if (sub === 'install') {
+    // 关键：launchd 里的进程没有会话，访问 ~/Documents、~/Desktop、~/Downloads
+    // 会卡在 TCC 授权上（open() 直接挂住，日志一片空白）。
+    // 所以常驻服务必须跑在不受保护的位置：优先用安装目录，必要时把运行时复制过去。
+    const home = process.env.HERMES_PURGE_HOME || path.join(os.homedir(), '.hermes-purge');
+    const protectedDirs = ['Documents', 'Desktop', 'Downloads'].map((d) => path.join(os.homedir(), d));
+    const srcDir = path.join(__dirname, '..');
+    const inProtected = protectedDirs.some((d) => srcDir === d || srcDir.startsWith(d + path.sep));
+
+    let runtime = path.join(home, 'app');
+    const runtimeCli = path.join(runtime, 'bin', 'purge.js');
+    if (inProtected || !fs.existsSync(runtimeCli)) {
+      fs.mkdirSync(runtime, { recursive: true });
+      for (const part of ['bin', 'lib', 'adapters', 'payload', 'package.json']) {
+        const from = path.join(srcDir, part);
+        if (!fs.existsSync(from)) continue;
+        fs.cpSync(from, path.join(runtime, part), { recursive: true, force: true });
+      }
+      if (inProtected) {
+        console.log('注意：当前仓库在受保护目录（' + path.basename(protectedDirs.find((d) => srcDir.startsWith(d))) + '），');
+        console.log('      launchd 访问那里会卡在系统授权上，已把运行时复制到 ' + runtime);
+      }
+    }
+
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, agent.plist({
+      node: process.execPath, cli: path.join(runtime, 'bin', 'purge.js'),
+      target: TARGET, port,
+    }), 'utf8');
+    const uid = process.getuid ? process.getuid() : 0;
+    const domain = 'gui/' + uid;
+    const label = require('../lib/v2/agent').LABEL;
+    // 先卸掉旧的（不存在会报错，忽略），再 enable + bootstrap ——
+    // 只 load 不 enable 的话，之前卸过一次的 label 会停在 disabled，bootstrap 后也不启动。
+    run('launchctl', ['bootout', domain + '/' + label]);
+    run('launchctl', ['unload', file]);
+    const en = run('launchctl', ['enable', domain + '/' + label]);
+    const bs = run('launchctl', ['bootstrap', domain, file]);
+    // bootstrap 之后 label 可能仍是 not running（尤其刚 bootout 过），补一次 kickstart
+    run('launchctl', ['kickstart', '-kp', domain + '/' + label]);
+    let ok = bs.status === 0;
+    if (!ok) {
+      const legacy = run('launchctl', ['load', '-w', file]);   // 老系统兜底
+      ok = legacy.status === 0;
+    }
+    console.log((ok ? '已装成开机自启：' : '加载失败：') + file);
+    if (!ok) console.log(((bs.stderr || '') + (en.stderr || '')).trim());
+
+    // 起来没起来，等一小会儿再报，别让用户自己去猜
+    const http = require('http');
+    const control = require('../lib/v2/control');
+    const tok = (control.loadState(TARGET) || {}).token || '';
+    let tries = 0;
+    const probe = () => {
+      tries++;
+      const req = http.request({ host: '127.0.0.1', port, path: '/api/health', headers: { 'x-purge-token': tok }, timeout: 800 }, (res) => {
+        res.resume();
+        console.log(res.statusCode === 200
+          ? '  控制服务已就绪：http://127.0.0.1:' + port
+          : '  控制服务返回 ' + res.statusCode + '，看日志：' + agent.logPath());
+      });
+      req.on('error', () => {
+        if (tries < 10) return setTimeout(probe, 400);
+        console.log('  服务暂时没响应，看日志：' + agent.logPath());
+      });
+      req.on('timeout', () => req.destroy());
+      req.end();
+    };
+    probe();
+    console.log('  服务地址 http://127.0.0.1:' + port + '（只监听本机）');
+    console.log('  日志     ' + agent.logPath());
+    console.log('  查看状态 purge agent status    卸载：purge agent uninstall');
+    return;
+  }
+
+  if (sub === 'uninstall') {
+    const uid = process.getuid ? process.getuid() : 0;
+    run('launchctl', ['bootout', 'gui/' + uid + '/' + require('../lib/v2/agent').LABEL]);
+    run('launchctl', ['unload', file]);
+    if (fs.existsSync(file)) fs.unlinkSync(file);
+    console.log('已移除开机自启：' + file);
+    return;
+  }
+
+  if (sub === 'restart' || sub === 'start') {
+    const uid2 = process.getuid ? process.getuid() : 0;
+    const domain2 = 'gui/' + uid2;
+    const label2 = require('../lib/v2/agent').LABEL;
+    if (!fs.existsSync(file)) {
+      console.log('还没装成自启：先跑 purge agent install');
+      process.exitCode = 1;
+      return;
+    }
+    run('launchctl', ['enable', domain2 + '/' + label2]);
+    const k = run('launchctl', ['kickstart', '-k', domain2 + '/' + label2]);
+    console.log(k.status === 0 ? '已请求重启控制服务（kickstart -k）' : '重启失败：' + (k.stderr || '').trim());
+    setTimeout(() => {
+      const l = run('launchctl', ['list']).stdout || '';
+      const row = l.split('\n').find((x) => x.includes(label2));
+      console.log(row ? '  launchctl: ' + row.trim() : '  launchctl: 未加载');
+    }, 1500);
+    return;
+  }
+
+  // status
+  const list = run('launchctl', ['list']);
+  const line = (list.stdout || '').split('\n').find((l) => l.includes(agent.LABEL));
+  console.log('plist    ' + file + (fs.existsSync(file) ? '  （存在）' : '  （不存在）'));
+  if (line) {
+    const [pid, code] = line.trim().split(/\s+/);
+    console.log('运行中   pid=' + (pid === '-' ? '（未运行）' : pid) + ' 最后退出码=' + code);
+    if (pid === '-') {
+      console.log('         ↑ 已加载但没在跑。有的机器（锁定的 / 无图形会话）不认 RunAtLoad/KeepAlive，');
+      console.log('           用 purge agent restart 拉起来，或者直接前台跑 purge serve。');
+    }
+  } else {
+    console.log('运行中   未加载');
+  }
+  console.log('日志     ' + agent.logPath());
+}
+
 function cmdServe() {
   const control = require('../lib/v2/control');
   const want = args.port && args.port !== true ? Number(args.port) : 9123;
+
+  // --install-agent：装好 launchd 后不再前台常驻
+  if (args['install-agent']) {
+    args._ = ['agent', 'install'];
+    return cmdAgent();
+  }
   const { server, token } = control.start({
     target: TARGET,
     cliPath: path.join(__dirname, 'purge.js'),
@@ -635,6 +897,11 @@ function cmdDesktop() {
     console.log(d);
     console.log('  面板    ' + (st.installed ? '已安装' : '未安装'));
     console.log('  备份    ' + (st.hasBackup ? '有（可 uninstall 还原）' : '无'));
+    if (st.installed && st.snapshotVersion) {
+      const stale = require('../lib/v2/desktop').isStale(d, pkgVersion());
+      console.log('  快照    ' + st.snapshotVersion + ' · ' + st.snapshotAt +
+        (stale ? paint('  已过期 → purge desktop sync', C.y) : paint('  与当前版本一致', C.g)));
+    }
   }
 }
 
@@ -645,6 +912,20 @@ function cmdDoctor() {
   for (const c of rep.checks) {
     console.log('  ' + (c.ok ? paint('✔', C.g) : paint('✖', C.r)) + ' ' + c.name.padEnd(16) + ' ' + C.dim + c.detail + C.reset);
   }
+  // 面板里嵌的是静态快照；版本升级后它会一直是旧的（用户看到的是过期结论）
+  try {
+    const desktop = require('../lib/v2/desktop');
+    const dists = desktop.findDists(TARGET).filter((d) => desktop.status(d).installed);
+    if (dists.length) {
+      const stale = dists.filter((d) => desktop.isStale(d, pkgVersion()));
+      const info = desktop.status(dists[0]);
+      console.log('  ' + (stale.length ? paint('✖', C.y) : paint('✔', C.g)) + ' ' + '面板快照'.padEnd(16) + ' ' +
+        C.dim + (stale.length
+          ? '过期：面板里是 ' + info.snapshotVersion + '（' + info.snapshotAt + '），当前 ' + pkgVersion() + ' → purge desktop sync'
+          : '与当前版本一致（' + info.snapshotVersion + ' · ' + info.snapshotAt + '）') + C.reset);
+    }
+  } catch (e) { /* 面板没装或读不到，跳过 */ }
+
   // 配置文件的哈希一定会被宿主改（它会重写序列化），所以单独看语义：直接跑配置层 cap
   const cfgCaps = CAPS.filter((cap) => cap.layer === 'config');
   if (cfgCaps.length) {
@@ -899,6 +1180,7 @@ switch (cmd) {
   case 'plugin': cmdPlugin(); break;
   case 'desktop': cmdDesktop(); break;
   case 'serve': cmdServe(); break;
+  case 'agent': cmdAgent(); break;
   case 'stats': cmdStats(); break;
   case 'setup': cmdSetup(); break;
   case 'uninstall': cmdUninstall(); break;

@@ -30,11 +30,12 @@ t('--out 产出稳定 JSON：只有 id/cap/status/impl，不含本机路径', ()
   const r = run('parity', '--out=' + out);
   assert.strictEqual(r.status, 0, r.stderr);
   const j = JSON.parse(fs.readFileSync(out, 'utf8'));
-  assert.strictEqual(j.schema, 1);
-  assert.strictEqual(j.caps.length, 77);
+  assert.strictEqual(j.schema, 2);   // schema 2 = mac 侧加了 layers 汇总
+  // cap 数量由补丁表决定（两个泳道都在扩：31 → 41 → 50 → 64 → 71 → 77），用清单长度而不是硬编码
+  assert.strictEqual(j.caps.length, require('../lib/patches').PATCHES.length);
   assert.ok(j.summary && typeof j.summary.applied === 'number');
   for (const c of j.caps) {
-    assert.deepStrictEqual(Object.keys(c).sort(), ['cap', 'id', 'impl', 'status']);
+    assert.deepStrictEqual(Object.keys(c).sort(), ['cap', 'id', 'impl', 'layer', 'status']);
   }
   assert.ok(!JSON.stringify(j).includes(tmp), '不该带本机路径');
 });

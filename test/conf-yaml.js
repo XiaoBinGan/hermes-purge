@@ -86,5 +86,64 @@ t('apply 之后 G01 状态是 applied，不是 pending', () => {
   fs.rmSync(home, { recursive: true, force: true });
 });
 
+t('config 根上没有 model: 段时，补出 model.max_tokens（否则 C15 永远 pending）', () => {
+  const { home, tree } = makeTree('approvals:\n  mode: prompt\n');
+  const r = apply(tree);
+  assert.strictEqual(r.status, 0, r.stderr);
+  const cfg = readCfg(home);
+  assert.ok(/^model:/m.test(cfg), '没有补出 model 段：\n' + cfg);
+  assert.ok(/^\s*max_tokens:\s*16000/m.test(cfg), '没有写入 max_tokens：\n' + cfg);
+  const st = JSON.parse(spawnSync(process.execPath, [CLI, 'status', '--json', '--target=' + tree], { encoding: 'utf8' }).stdout);
+  const c15 = st.rows.find((x) => x.id === 'C15');
+  assert.strictEqual(c15.status, 'applied', 'C15 = ' + c15.status + ' / ' + c15.detail);
+  fs.rmSync(home, { recursive: true, force: true });
+});
+
+t('追加路径写出的 approvals 也带 marker，且每行只有一个', () => {
+  const { home, tree } = makeTree('model:\n  default: x\n');
+  apply(tree);
+  apply(tree);
+  const cfg = readCfg(home);
+  const modeLine = cfg.split('\n').find((l) => /^\s*mode:/.test(l));
+  assert.ok(modeLine && modeLine.includes('[hermes-purge]'), 'mode 行没有 marker：' + modeLine);
+  for (const line of cfg.split('\n')) {
+    assert.ok((line.match(/\[hermes-purge\]/g) || []).length <= 1, '同一行 marker 重复：' + line);
+  }
+  fs.rmSync(home, { recursive: true, force: true });
+});
+
+t('.env 里值不对时会就地改写（不是只看键在不在）', () => {
+  const { home, tree } = makeTree('model:\n  default: x\n');
+  fs.writeFileSync(path.join(home, '.env'), 'HERMES_APPROVAL_MODE=prompt\nOTHER=2\n');
+  apply(tree);
+  const env = fs.readFileSync(path.join(home, '.env'), 'utf8');
+  assert.ok(/^HERMES_APPROVAL_MODE=off$/m.test(env), '值没被改写：\n' + env);
+  assert.ok(/^HERMES_YOLO_MODE=1$/m.test(env), '缺的键没追加：\n' + env);
+  assert.ok(/^OTHER=2$/m.test(env), '无关行被动了：\n' + env);
+  assert.strictEqual((env.match(/HERMES_APPROVAL_MODE=/g) || []).length, 1, '出现了重复键：\n' + env);
+  fs.rmSync(home, { recursive: true, force: true });
+});
+
+t('.env 不存在时会创建，且开头不留空白行', () => {
+  const { home, tree } = makeTree('model:\n  default: x\n');
+  fs.rmSync(path.join(home, '.env'));
+  apply(tree);
+  const env = fs.readFileSync(path.join(home, '.env'), 'utf8');
+  assert.ok(env.startsWith('# [hermes-purge]'), '开头有多余空白：' + JSON.stringify(env.slice(0, 20)));
+  assert.ok(/^HERMES_YOLO_MODE=1$/m.test(env) && /^HERMES_APPROVAL_MODE=off$/m.test(env), env);
+  const st = JSON.parse(spawnSync(process.execPath, [CLI, 'status', '--json', '--target=' + tree], { encoding: 'utf8' }).stdout);
+  assert.strictEqual(st.rows.find((x) => x.id === 'G02').status, 'applied');
+  fs.rmSync(home, { recursive: true, force: true });
+});
+
+t('.env 已经正确时不重复写（幂等）', () => {
+  const { home, tree } = makeTree('model:\n  default: x\n');
+  apply(tree);
+  const first = fs.readFileSync(path.join(home, '.env'), 'utf8');
+  apply(tree);
+  assert.strictEqual(fs.readFileSync(path.join(home, '.env'), 'utf8'), first, '.env 不幂等');
+  fs.rmSync(home, { recursive: true, force: true });
+});
+
 console.log('\n' + (fail === 0 ? `全部通过 ${pass}/${pass}` : `${pass} 通过 · ${fail} 失败`));
 process.exit(fail === 0 ? 0 : 1);

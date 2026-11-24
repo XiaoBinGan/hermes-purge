@@ -120,7 +120,8 @@ purge parity --diff=mac.json     # 在另一台机器上比对，一致返回 0�
 ---
 
 > **两条泳道并行**：macOS 与 Windows 各自维护自己的锚点文件与分支，互不覆盖。
-> `main` 已开分支保护（必须走 PR，直推会被拒绝）；规则见 [`docs/lanes.md`](docs/lanes.md)
+> `main` 已开分支保护（必须走 PR，直推会被拒绝）；规则见 [`docs/lanes.md`](docs/lanes.md)、
+> 同步板 [`docs/lane-sync.md`](docs/lane-sync.md)
 > （分支 `lane/mac` / `lane/win` / `lane/win-merge`，`main` 只做集成；`lane/win*` 两个分支跟 `main` 同一个提交）。
 
 ## 它到底改了什么（30 秒版）
@@ -320,7 +321,8 @@ purge setup
 
 公共 npm 源（registry.npmjs.org）**不发布** —— 首次发布被平台侧发布权限审核挡住，已放弃该渠道。
 
-**动手之前先 `purge status`**。它只读、不写盘，先把这棵树的漂移基线记下来：
+**动手之前先 `purge status`**。它只读不写盘；本机 4937 个 `.py` 的宿主上 `purge status` ≈ **0.4 秒**（符号索引 + 批量 AST 定位，
+基线是 2.4 秒），先把这棵树的漂移基线记下来：
 
 ```bash
 node bin/purge.js status --target="$HOME/.hermes/hermes-agent"
@@ -447,7 +449,14 @@ npm rm -g hermes-purge
 |---|---|---|---|
 | 0.21.0 | 主锚不成立，走 **18 条变体** | **已实测** —— `~/.hermes/hermes-agent`，宿主 python 3.11；`status` applied 31 / pending 0 / drifted 0（当时 cap 数为 31，现为 77），`doctor` 健康，L2 14 项全绿 | **未实测** |
 | 0.21.3 | 主锚，0 处变体 | **未实测** | **已实测** —— CRLF 树闭环；另在 **Win11 ARM 真机**上跑通补丁层工具链（见下） |
-| 0.21.4 | 主锚，0 处变体 | **未实测** | **已实测** —— 沙箱（pristine `git archive` + 最小 config）上 `31/31 applied`（当时 cap 数为 31，现为 77）、L1 + L2 通过、`revert` 代码逐字节还原 |
+| 0.21.4 | 主锚，0 处变体 | **未实测** | **已实测** —— 沙箱（pristine `git archive` + 最小 config）上 `31/31 applied`、L1 14 项 + L2 14 项通过、`revert` 代码逐字节还原 |
+| 0.21.5 | 主锚，0 处变体 | **未实测** | **已实测** —— 上游 tag `abandoned-rc.10-v0.21.5` 的 pristine 树：`31/31 applied`、L1 14 项通过、`revert` 代码逐字节还原；L2 因沙箱缺 `ruamel.yaml` 未跑（环境限制，非补丁问题） |
+| 0.21.6 | 主锚，0 处变体 | **未实测** | **已实测** —— 上游 tag `abandoned-rc.1-v0.21.6` 的 pristine 树：`31 pending · 0 drifted` → `apply` 后 `31/31`、L1 14 项通过、`revert` 逐字节还原；L2 同因缺 `ruamel.yaml` 未跑 |
+| 0.21.7 | 主锚，0 处变体 | **未实测** | **已实测** —— 上游 tag `abandoned-rc.1-v0.21.7` 的 pristine 树：`31 pending · 0 drifted` → `apply` 后 `31/31`、L1 14 项通过、`revert` 逐字节还原；config/.env 改写正确（mode→off、timeout→86400、.env 值就地改） |
+
+> 上面几行的数字是当时补丁面还是 31 条时记的；现在补丁面已扩到 77 条，
+> 0.21.4/0.21.5 沙箱最新复跑结果为 `applied 72 · drifted 0`。
+
 
 - **0.21.0 为什么走变体**：0.21.2/0.21.3 才做的模块拆分（`approval_context` / `approval_detection` / `turn_stop_gates` / `stream_delivery` / `turn_request_assembly`）。0.21.0 里这些函数还在 `tools/approval.py`、`agent/conversation_loop.py`、`run_agent.py`。走变体的 18 条：C04 C05 C06 C11 C12 C13 C14 C16 C18 C18b C18c C18d C19b C19c C19d C19e C20 C20b。
 - **0.21.3+ 为什么不用变体**：主锚直接命中。`--status`（1.x）里一条 `[0.21.0]` 标记都不该出现。

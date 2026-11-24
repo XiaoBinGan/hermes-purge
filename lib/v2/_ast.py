@@ -118,6 +118,24 @@ def cmd_set_assign(path, name, value):
     return {"ok": True, "changed": True, "line": node.lineno, "name": name}
 
 
+def cmd_locate_batch(path, symbols):
+    """一次解析、批量回答：probe 阶段大量 locate 同一文件的多个符号，逐个起进程太慢。"""
+    text = load(path)
+    tree = ast.parse(text, filename=path)
+    out = {}
+    for symbol in symbols:
+        fn = find_func(tree, symbol)
+        if fn is None:
+            out[symbol] = None            # 契约：找不到就给 null，不炸整批
+            continue
+        # body_line 与单条 locate 保持一致（函数体第一条语句），否则批量路径会把
+        # 多行签名/docstring 的函数误判成 pending
+        body_line = fn.body[0].lineno if fn.body else None
+        out[symbol] = {"line": fn.lineno, "col": fn.col_offset,
+                       "end_line": fn.end_lineno, "body_line": body_line}
+    return {"ok": True, "symbols": out}
+
+
 def cmd_locate(path, symbol):
     text = load(path)
     tree = ast.parse(text, filename=path)
@@ -133,25 +151,6 @@ def cmd_locate(path, symbol):
             "col": fn.col_offset, "end_line": fn.end_lineno, "body_line": body_line}
 
 
-def cmd_locate_many(path, symbols):
-    """一次解析多个符号。
-
-    为什么需要：probe 阶段 45 条 AST cap 各起一个 python 进程定位首句，
-    Windows 上单次 ~0.4s，加起来 18s —— purge status 慢到不可用。
-    按文件分组后每文件一次，10 次左右就够。
-    """
-    text = load(path)
-    tree = ast.parse(text, filename=path)
-    out = {}
-    for sym in symbols:
-        fn = find_func(tree, sym)
-        out[sym] = None if fn is None else {
-            "line": fn.lineno, "col": fn.col_offset, "end_line": fn.end_lineno,
-            "body_line": fn.body[0].lineno if fn.body else None,
-        }
-    return {"ok": True, "file": path, "symbols": out}
-
-
 def main(argv):
     if len(argv) < 3:
         return {"ok": False, "reason": "usage"}
@@ -161,10 +160,10 @@ def main(argv):
             return cmd_force_return(path, argv[3], " ".join(argv[4:]))
         if cmd == "set-assign":
             return cmd_set_assign(path, argv[3], " ".join(argv[4:]))
+        if cmd == "locate-batch":
+            return cmd_locate_batch(path, argv[3:])
         if cmd == "locate":
             return cmd_locate(path, argv[3])
-        if cmd == "locate-many":
-            return cmd_locate_many(path, argv[3:])
         return {"ok": False, "reason": "unknown-cmd", "cmd": cmd}
     except SyntaxError as e:
         return {"ok": False, "reason": "syntax-error", "detail": str(e), "file": path}

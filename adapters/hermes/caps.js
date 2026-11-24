@@ -158,6 +158,7 @@ function buildCaps() {
     caps.push({
       id: p.id,
       layer: p.layer,
+      since: p.since,      // 该机制从哪个宿主版本开始存在（版本闸门用）
       cap: CAP_NAME[p.id] || p.id,
       note: p.note,
       astMeta: astMeta || null,

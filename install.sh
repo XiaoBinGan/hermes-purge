@@ -8,6 +8,8 @@
 #   ./install.sh --relink        # 强制把 ~/.hermes-purge 重建成指向当前 checkout 的链接
 #   HERMES_PURGE_HOME=... ./install.sh
 #   HERMES_PURGE_BIN=...  ./install.sh      # 命令装到别处（默认 ~/.local/bin）
+#   ./install.sh --base-url=https://mirror.example/hermes-purge   # 用镜像下源码包
+#   ./install.sh --no-path                # 不自动改 shell rc（默认会写一行 PATH）
 #
 # 只做三件事：确认 Node ≥18、把仓库放到固定位置、在 PATH 里留两个 shim。
 # 不改宿主、不写系统目录、不需要 sudo。
@@ -18,13 +20,14 @@
 set -euo pipefail
 
 REPO="${HERMES_PURGE_REPO:-https://github.com/XiaoBinGan/hermes-purge.git}"
-GH="${HERMES_PURGE_GH:-https://github.com/XiaoBinGan/hermes-purge}"
+GH="${HERMES_PURGE_BASE_URL:-${HERMES_PURGE_GH:-https://github.com/XiaoBinGan/hermes-purge}}"
 VERSION="${HERMES_PURGE_VERSION:-latest}"
 DEST="${HERMES_PURGE_HOME:-$HOME/.hermes-purge}"
 BIN="${HERMES_PURGE_BIN:-$HOME/.local/bin}"
 MODE=install
 DO_SETUP="${HERMES_PURGE_SETUP:-0}"
 DO_YES=0
+NO_PATH=0
 RELINK=0
 
 for a in "$@"; do
@@ -35,6 +38,8 @@ for a in "$@"; do
     --relink) RELINK=1 ;;
     --home=*) DEST="${a#*=}" ;;
     --version=*) VERSION="${a#*=}" ;;
+    --base-url=*) GH="${a#*=}" ;;
+    --no-path) NO_PATH=1 ;;
     --bin=*)  BIN="${a#*=}" ;;
     -h|--help)
       sed -n '2,/^set -euo pipefail/p' "$0" | sed 's/^# \{0,1\}//' | sed '$d'
@@ -140,9 +145,11 @@ else
   trap 'rm -rf "$TMPD"' EXIT
   say "下载源码包：$SRC_URL"
   if command -v curl >/dev/null 2>&1; then
-    curl -fsSL "$SRC_URL" -o "$TMPD/src.tar.gz" || die "下载失败：$SRC_URL"
+    curl -fsSL --retry 3 --connect-timeout 20 "$SRC_URL" -o "$TMPD/src.tar.gz" \
+      || die "下载失败：$SRC_URL（可用 --base-url=URL 换镜像）"
   elif command -v wget >/dev/null 2>&1; then
-    wget -qO "$TMPD/src.tar.gz" "$SRC_URL" || die "下载失败：$SRC_URL"
+    wget -qO "$TMPD/src.tar.gz" "$SRC_URL" \
+      || die "下载失败：$SRC_URL（可用 --base-url=URL 换镜像）"
   else
     die "既没有 curl 也没有 wget。请手动下载 $SRC_URL 解开后，在目录里跑 ./install.sh"
   fi
@@ -204,15 +211,36 @@ EOF
   say "已安装命令：$BIN/purge · $BIN/hp"
 fi
 
+# 与 install.ps1 对齐：默认把 PATH 写进 shell rc（幂等），--no-path 可跳过
+rc_file() {
+  case "${SHELL:-}" in
+    */zsh)  [ -f "$HOME/.zshrc" ] && { printf '%s' "$HOME/.zshrc"; return; } ;;
+    */bash) [ -f "$HOME/.bashrc" ] && { printf '%s' "$HOME/.bashrc"; return; } ;;
+  esac
+  for f in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.profile"; do
+    [ -f "$f" ] && { printf '%s' "$f"; return; }
+  done
+  printf '%s' "$HOME/.profile"
+}
+
 case ":$PATH:" in
-  *":$BIN:"*) ;;
+  *":$BIN:"*) say "PATH 已包含 $BIN" ;;
   *)
-    if [ "$IS_WIN" = 1 ]; then
+    if [ "$NO_PATH" = "1" ]; then
+      warn "$BIN 不在 PATH 里（--no-path 已跳过写入）。手动加："
+      warn "  export PATH=\"$BIN:\$PATH\""
+    elif [ "$IS_WIN" = 1 ]; then
       warn "注意：$(winpath "$BIN") 不在 PATH 里。PowerShell 里加（当前用户，重开终端生效）："
       warn "  [Environment]::SetEnvironmentVariable('Path', [Environment]::GetEnvironmentVariable('Path','User') + ';$(winpath "$BIN")', 'User')"
     else
-      warn "注意：$BIN 不在 PATH 里。把下面一行加到 ~/.zshrc 或 ~/.bashrc："
-      warn "  export PATH=\"$BIN:\$PATH\""
+      RC="$(rc_file)"
+      LINE="export PATH=\"$BIN:\$PATH\""
+      if [ -f "$RC" ] && grep -qF "$LINE" "$RC" 2>/dev/null; then
+        say "PATH 已在 $(basename "$RC") 里"
+      else
+        printf '\n# hermes-purge\n%s\n' "$LINE" >> "$RC"
+        say "已把 $BIN 写进 $(basename "$RC")（新开终端生效）"
+      fi
     fi ;;
 esac
 

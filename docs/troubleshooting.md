@@ -30,6 +30,8 @@ ls "$T/../config.yaml"           # 存在 = 配置根在上一层（0.21.0 与�
 - **Windows 那一列（`set T=...`、`%T%\venv\Lib\site-packages`、`rmdir /s /q`）是等价写法，未实测。**
 - 0.21.3 / 0.21.4 才有的路径（`tools/approval_detection.py`、`agent/turn_stop_gates.py`）取自 README「版本兼容」一节，本机没有这两版，未实测。
 - 拿不准的地方本文会直接写「未实测」，不写「应该可以」。
+- 2026-11-24 增补第 7 节：3.1.x 在 macOS 0.21.0 实机、0.21.4 / 0.21.5 pristine 沙箱上踩到并修掉的
+  五类故障（sentinel / config / .env / launchd / 性能），判据与修法都是照实跑的结果写的。
 
 ---
 
@@ -429,6 +431,147 @@ node bin/purge.js revert --id=<快照 id> --target="$T"    # 逐级回退
 
 ---
 
+## 7. 3.1.x 的新故障（这几个只有真机会遇到）
+
+3.1.x 在真实宿主上又踩到五种，逐条给判据。**每条都先给「怎么确认」，再给「怎么修」**。
+
+### 7.1 `apply` 报成功，`status` 却说 `drifted`（sentinel 不匹配）
+
+**判据**（两条命令对比）：
+
+```bash
+node bin/purge.js apply  --target="$T" | tail -3      # 改写 N · 未命中 0
+node bin/purge.js status --target="$T" | sed -n 2p    # 却有 drifted
+grep -c '\[hermes-purge\]' "$T/agent/turn_context.py" # marker 明明在
+```
+
+marker 在、`apply` 说改了、`status` 却说不可用 —— 这是**判定串**对不上：文本层默认找
+`[hermes-purge] <cap id>`，但有些替换的注释里没写 cap id。
+
+**怎么确认是哪条**：
+
+```bash
+node bin/purge.js status --json --target="$T" \
+  | grep -A3 '"status": "drifted"' | grep '"id"'
+```
+
+**修**：3.1.6 起这些 cap 都带了显式 `sentinel`（`lib/patches.js` 里的 `SENTINELS`），
+先确认版本 ≥ 3.1.6；自己加新锚点时，注释里**务必带上 cap id**（`# [hermes-purge] C13 …`）
+或显式给 `sentinel`。回归测试：`node test/sentinel.js`。
+
+### 7.2 `config.yaml` 的 `approvals.mode` 没改成 `off` / 注释越叠越多
+
+**判据**：
+
+```bash
+grep -A3 '^approvals:' "$T/../config.yaml"
+```
+
+三种病态输出，一眼可辨：
+
+```yaml
+mode: prompt                              # 病 1：值没改，G01 永远 pending
+timeout: 86400  # [hermes-purge]  # [hermes-purge]   # 病 2：每 apply 一次多叠一层
+# （没有 model: 段）                        # 病 3：C15 永远 pending（无处可写）
+```
+
+**修**：
+
+- 病 1 / 病 2 → 3.1.6 起 `yamlApprovals` 按块重写（`mode: 'off'` / `timeout: 86400` 都走「有则替换、无则插入」，marker 每行最多一个）
+- 病 3 → 3.1.7 起 `yamlMaxTokens` 在根上没有 `model:` 段时会补出一段
+- 改完重跑 `purge apply`；幂等回归：`node test/conf-yaml.js`
+
+### 7.3 `.env` 里有 `HERMES_APPROVAL_MODE=prompt`，`apply` 之后还是 `prompt`
+
+**判据**：
+
+```bash
+grep -E '^HERMES_(YOLO_MODE|APPROVAL_MODE)=' "$T/../.env"
+```
+
+**原因**：3.1.6 之前 `appendEnv` 只判断「键在不在」，值错了也算已生效。
+
+**修**：3.1.7 起值感知 —— 值不对**就地改写**那一行，缺的键才追加；`.env` 不存在会自动创建。
+回归：`node test/conf-yaml.js`（值改写 / 缺文件创建 / 幂等）。
+
+### 7.4 macOS 上 `purge agent install` 之后服务起不来、日志一片空白
+
+**判据**：
+
+```bash
+purge agent status                                   # pid=（未运行）
+launchctl print gui/$(id -u)/com.xiaobingan.hermes-purge.serve | grep -E 'state|last exit'
+ls -l ~/Library/Logs/hermes-purge-serve.log          # 0 字节
+ps -o pid,etime,command -p <pid>                     # 进程在，但端口不通
+```
+
+如果 `ps` 里进程活着、`lsof -iTCP:9123` 空、日志 0 字节 —— `sample <pid> 1 -f /tmp/s.log`，
+栈里若出现 `BindingData::… → ReadFileSync → open`，就是**卡在 TCC 授权**：
+launchd 代理访问 `~/Documents` `~/Desktop` `~/Downloads` 会挂住。
+
+**修**：当前 `lane/mac` 起（v3.1.8 及以后） `agent install` 会把运行时复制到 `~/.hermes-purge/app` 再让 plist 指向它
+（不受保护的位置）。手动版：
+
+```bash
+purge agent uninstall
+HERMES_PURGE_HOME=~/.hermes-purge purge agent install --target="$T"
+```
+
+**还有一种情况（2026-11-24 实机验证）**：`launchctl print` 显示 `state = not running`、
+`last exit code = -9`（或 `(never exited)`），plist 里 `KeepAlive` 明明写着 true，
+`launchctl print-disabled` 也是 `enabled` —— 但进程被杀掉后**不会自动重启**，甚至 `RunAtLoad`
+也不生效。这台机器（以及锁屏 / 无图形会话 / 受限的企业机）就是这样：launchd 拒绝自行拉起
+LaunchAgent，只有显式 `kickstart` 才有用。
+
+**判据**：拿一个最小任务做对照，如果它也起不来，说明是机器策略而不是我们的 plist：
+
+```bash
+cat > ~/Library/LaunchAgents/com.test.keepalive.probe.plist <<'PL'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.test.keepalive.probe</string>
+  <key>ProgramArguments</key><array><string>/bin/sleep</string><string>300</string></array>
+  <key>RunAtLoad</key><true/><key>KeepAlive</key><true/>
+</dict></plist>
+PL
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.test.keepalive.probe.plist
+launchctl list | grep keepalive.probe      # pid 是 `-` = 这台机器不会自启
+launchctl bootout gui/$(id -u)/com.test.keepalive.probe
+rm ~/Library/LaunchAgents/com.test.keepalive.probe.plist
+```
+
+**修**：
+
+```bash
+purge agent restart     # kickstart -k，进程立刻起来（这一轮新增）
+purge agent status      # 会明确写「已加载但没在跑」并给上面这条命令
+purge serve             # 或者干脆前台跑，别依赖 launchd
+```
+
+`purge agent restart` 也适合放进 shell 启动脚本，绕开机器策略。
+
+另一个常见现象：`launchctl print` 显示 `state = not running`、`last exit code = (never exited)`
+—— 那是只 `bootstrap` 没 `enable`，label 停在 disabled。当前 `lane/mac` 起（v3.1.8 及以后）安装流程是
+`bootout → enable → bootstrap → kickstart`，并会探测 `/api/health` 报「已就绪」。
+
+### 7.5 `status` 慢（几秒才出结果）
+
+**判据**：
+
+```bash
+time node bin/purge.js status --target="$T" > /dev/null
+find "$T" -name '*.py' -not -path '*/venv/*' | wc -l     # 文件越多越慢
+```
+
+**原因**：3.1.8 之前每个符号都要把全树 `.py` 读一遍，且每个 AST 符号起一个 python 进程。
+
+**修**：当前 `lane/mac` 起（v3.1.8 及以后）符号索引 + `_ast.py locate-batch`。本机（4937 个 `.py`）实测 **2.4s → 0.4s**。
+若你的树特别大且符号落在 `agent/ tools/ hermes_cli/ acp_adapter/` 之外，索引会自动退回全树扫描
+（结果不变，只是这一次慢一点）。回归：`node test/ast-batch.js`。
+
+---
+
 ## 速查表
 
 | 症状 | 第一条命令 |
@@ -441,6 +584,11 @@ node bin/purge.js revert --id=<快照 id> --target="$T"    # 逐级回退
 | `hp` 报 EHP_CONFIG | `node bin/hp.js --home="$HOME/.hermes" "..."` |
 | 回滚有没有退干净 | `cd "$T" && git status --short \| grep -v '\.bak'` |
 | 文件是不是被写坏 | `grep -c $'\r\r' "$T/tools/approval.py"` |
+| apply 说改了但 status 说 drifted | `node test/sentinel.js`（判定串自洽性） |
+| config 的 mode 改不动 / 注释越叠越多 | `grep -A3 '^approvals:' "$T/../config.yaml"` |
+| `.env` 值没改 | `grep -E '^HERMES_(YOLO_MODE\|APPROVAL_MODE)=' "$T/../.env"` |
+| macOS 服务起不来、日志空 | `purge agent status` + `launchctl print gui/$(id -u)/com.xiaobingan.hermes-purge.serve` |
+| status 慢 | `time node bin/purge.js status --target="$T"` |
 
 跑完还不知道问题在哪，就把这三份输出一起留档：`purge status --json`、
 `purge verify --level=2`、`cat "$T/.hermes-purge/v2/audit.jsonl"`。
