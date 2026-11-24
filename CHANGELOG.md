@@ -1,5 +1,22 @@
 # Changelog
 
+## 3.1.9 —— Windows 真正的一键：装完直接能敲 purge（PATH 自动写）
+
+之前 `install.ps1` 装完只打印一段「把下面这行加到 PATH」的命令，等于还要用户自己再来一步。
+现在默认直接写用户级 PATH（`HKCU\Environment`，不需要管理员），并且**当前会话立刻生效**：
+
+- 新增 `-NoPath`：不想改 PATH 的人可以跳过
+- 幂等：已在 PATH 里就只说一句，不会重复追加
+- 装完接着 `purge setup --yes`（`-Setup -Yes`），一条命令走完 安装 → 识别宿主 → 应用 → 验证
+
+真机实测（Release 资产 + 本地镜像）：
+
+```
+install.ps1 -BaseUrl <镜像> -Dest "…\中文 一键\hermes-purge" -Bin "…\bin" -Setup -Yes
+  → 下载 → 解压 → 装到中文路径 → 已把 …\bin 加到用户 PATH → purge setup: 31 条 · 已生效 31
+  → purge --version = 3.1.9
+```
+
 ## 3.1.8 —— install.ps1 自举下载在真实网络下可用（TLS 1.2 / curl 兜底 / -BaseUrl 镜像）
 
 3.1.7 把 Windows 修复进了资产，但在「只下载 install.ps1、仓库不在本机」这条路径上还有个真问题：

@@ -14,6 +14,8 @@ param(
   # 装完直接跑 purge setup（等价于 POSIX 的 --setup）；-Yes 表示不问确认
   [switch]$Setup,
   [switch]$Yes,
+  # 默认把 Bin 加进用户 PATH（不需要管理员）；-NoPath 跳过
+  [switch]$NoPath,
   [string]$Dest = (Join-Path $env:LOCALAPPDATA 'hermes-purge'),
   [string]$Bin  = (Join-Path $env:LOCALAPPDATA 'hermes-purge\bin'),
   [string]$Repo = 'https://github.com/XiaoBinGan/hermes-purge.git',
@@ -142,10 +144,17 @@ foreach ($c in 'purge','hp') {
   Say "已安装命令：$cmdPath"
 }
 
-$userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-if ($userPath -split ';' -notcontains $Bin) {
-  Warn "注意：$Bin 不在用户 PATH 里。把下面一行加到 PATH（或重启终端后手动加）："
-  Warn "  [Environment]::SetEnvironmentVariable('Path', [Environment]::GetEnvironmentVariable('Path','User') + ';$Bin', 'User')"
+# ── PATH：装完就直接能敲 purge（不需要管理员、可重复执行）────────────────
+if (-not $NoPath) {
+  $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+  $parts = @($userPath -split ';' | Where-Object { $_ })
+  if ($parts -notcontains $Bin) {
+    [Environment]::SetEnvironmentVariable('Path', (@($parts) + $Bin) -join ';', 'User')
+    Say "已把 $Bin 加到用户 PATH（新开终端生效）"
+  } else {
+    Say "$Bin 已在用户 PATH 里"
+  }
+  $env:PATH = "$Bin;$env:PATH"
 }
 
 if ($Setup -or $Yes) {
