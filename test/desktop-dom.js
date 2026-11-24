@@ -54,7 +54,16 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 function fail(m) { console.log('✖ ' + m); process.exit(1); }
 
 (async () => {
-  await sleep(600);                       // 等注入脚本的首屏循环跑完
+  await sleep(1200);                      // 等注入脚本的首屏循环 + 免责声明（700ms 延迟）跑完
+
+  // 首次启动必须弹免责声明（改宿主源码的工具不能悄悄生效）
+  const eula = window.document.getElementById('purge-eula-mask');
+  if (!eula) fail('没有弹免责声明');
+  if (!/免责声明/.test(eula.textContent)) fail('免责声明文案不对：' + eula.textContent.slice(0, 80));
+  if (!/授权使用/.test(eula.textContent)) fail('缺少「授权使用」提醒');
+  window.document.getElementById('purge-eula-ok').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  if (window.document.getElementById('purge-eula-mask')) fail('点「我已了解」后弹框没关');
+  console.log('✓ 首次启动弹免责声明，确认后消失');
   const btn = window.document.querySelector('[data-purge-nav]');
   const lis = window.document.querySelectorAll('ul.gap-px > li');
   if (!btn) fail('没有注入入口');

@@ -1,5 +1,22 @@
 # Changelog
 
+## 3.2.0 —— 打开 Hermes 先弹免责声明（改宿主源码的工具不该悄悄生效）
+
+桌面端注入的脚本现在会在首次启动时弹一个**阻塞式免责声明**，确认后才继续使用：
+
+- 说明会改动 Hermes 源码与配置（关审批/护栏、注入提示词），`purge revert` 可逐字节还原
+- 只在你拥有或被授权使用的机器上使用、后果自负、遵守当地法律与组织规定
+- 升级 Hermes 后需重跑 `purge setup` / `purge desktop install`
+- 「我已了解并继续」写入 `localStorage['hermes-purge.eula.v1']`，同一版本只弹一次；
+  存储不可用（隐私模式等）时每次启动都弹 —— 宁可烦，也别假装没改过东西
+- 「看说明」链到仓库 README
+
+顺带修 `purge desktop sync`：它之前重新生成脚本时**丢掉了控制服务的 port/token**，
+刷新后面板按钮会 401；现在原样带上。
+
+验证：jsdom 断言「首次弹出 → 文案含授权使用 → 点击后消失」；再用 headless Chromium
+渲染注入后的页面，DOM 里确认 `#purge-eula-mask` 与按钮都在。
+
 ## 3.1.9 —— Windows 真正的一键：装完直接能敲 purge（PATH 自动写）
 
 之前 `install.ps1` 装完只打印一段「把下面这行加到 PATH」的命令，等于还要用户自己再来一步。
