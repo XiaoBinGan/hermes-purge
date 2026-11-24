@@ -1,5 +1,35 @@
 # Changelog
 
+## 3.8.1 —— 两个「补丁全绿但没用上」的缺口：安装版桌面端探不到、运行时没跑过没人说（外部反馈）
+
+用户报：`apply` 66 改写 / `verify` L1 32 + L2 14 通过 / `doctor` 全绿，但**菜单没出来**、**问成人的问题不回答**。
+补丁层确实都落了，缺的是两件「之后」的事，工具之前都不说。
+
+### ① 面板：只认代码根下的 dist，安装版桌面端扫不到
+
+`findDists` 原来只看 `<target>/apps/desktop/{dist,release/*}`。pm 装的宿主的代码根是 `hermes-agent`，
+而桌面端是**单独安装的 Electron 应用**（`…\Programs\…\resources\app.asar.unpacked\dist`）—— 探不到就不装，菜单自然没有。
+现在会扫安装版位置（`%LOCALAPPDATA%\Programs`、`%LOCALAPPDATA%\hermes`、`Program Files`、`/Applications`、
+`~/Applications`、`~/.local/share`），**只认名字里带 hermes 的目录** —— 别的 Electron 应用也有同名资源目录，往里写面板等于污染别人。
+
+### ② 运行时：shim 装了 ≠ 它被加载过 —— `doctor` 现在直说
+
+新增一项「运行时生效」，从 `metrics.jsonl` 找最后一条 turn 记录：
+
+```
+✔ 运行时生效  最近一轮 2026-11-24T13:17:43.370Z · surface=cli · model=GLM-5.2-CL · approval=off · 拒答重采样 0 次
+```
+
+没有 turn 记录时给的是：`还没有任何 turn 记录 —— shim 已注入但宿主没在打过补丁的进程里跑过；
+重启 dashboard / 桌面端后随便问一句，再看这里`。
+
+这一行同时回答了三个问题：宿主到底加载 shim 没有、用的哪个模型、审批是不是真的 off、拒答有没有触发重采样。
+「问了不回答」类问题第一步就看这里 —— 之前只能猜。
+
+### 不变的部分
+
+`--dist=DIR` 一直可用（安装版探不到时显式指定即可）；`purge plugin install` 的会话内 `/purge` 不受影响。
+`npm test` 22 个测试文件全绿。
 ## 3.8.0 —— mac 泳道并入 main：32 个提交（含两处判活修复）
 
 `lane/mac` 在这段时间里累积了 32 个提交 / 2282 行，全都在 main 之外。这版把它们并进来，
