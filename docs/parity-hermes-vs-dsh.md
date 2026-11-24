@@ -89,6 +89,20 @@ asar 解包目录、anthropic-oauth 分支、inspector 帧预算；Hermes 是单
 | C42–C45 | `tools/terminal_tool_guards.py` | `cmd &` / 锁 skill / gateway 生命周期 / 自身 checkout git 全放行 |
 | C46 | `agent/background_review.py` | 后台复核不再自动 deny |
 
+## 三·补二：第四轮挖到配置层默认值（G04–G09、C47）
+
+比函数 guard 更隐蔽的一类：`hermes_cli/config_defaults.py` 里写死的默认值，装出来就是这些数，从没人动过。
+
+| id | 键 | 默认 → 现值 |
+|----|------|------|
+| G04 | `terminal.timeout` / `lifetime_seconds` | 180s → 3600s / 300s → 86400s |
+| G05 | `tool_loop_guardrails.hard_stop_enabled` / `warnings_enabled` | true → false |
+| G06 | `context_file_max_chars` / `browser.inactivity_timeout` | 2 万字 → 20 万字 / 120s → 3600s |
+| G07 | `delegation.max_iterations` / `max_spawn_depth` / `child_timeout_seconds` / `max_summary_chars` | 250→2000 / 1→6 / 900→0 / 24000→0 |
+| G08 | `compression.threshold` / `target_ratio` / `protect_last_n` | 0.50→0.95 / 0.20→0.60 / 20→400 |
+| G09 | `updates.check` | true → false |
+| C47 | `_foreground_background_guidance` | 劝导文本 → `None` |
+
 ## 四、待办（下一版候选）
 
 1. `#21` terminal 命令超时 —— hermes `tools/terminal_tool.py` 的 `DEFAULT_TIMEOUT`
