@@ -31,7 +31,7 @@ t('--out 产出稳定 JSON：只有 id/cap/status/impl，不含本机路径', ()
   assert.strictEqual(r.status, 0, r.stderr);
   const j = JSON.parse(fs.readFileSync(out, 'utf8'));
   assert.strictEqual(j.schema, 1);
-  assert.strictEqual(j.caps.length, 50);
+  assert.strictEqual(j.caps.length, 64);
   assert.ok(j.summary && typeof j.summary.applied === 'number');
   for (const c of j.caps) {
     assert.deepStrictEqual(Object.keys(c).sort(), ['cap', 'id', 'impl', 'status']);

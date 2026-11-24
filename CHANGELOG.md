@@ -1,5 +1,38 @@
 # Changelog
 
+## 3.5.0 —— 挖穿宿主剩余拦截点：50 → 64 条（顺带把 status 从 29.5s 修到 3.3s）
+
+第三轮不再靠「对着 dsh 的清单找」，而是直接在 Hermes 源码里搜「会拦住或改写行为」的函数。找到三大块：
+
+### ① 写入守卫（7 条，`tools/file_tools_write_guards.py`）
+
+`write_file` 前要过七道检查：敏感路径（docker.sock）、受保护指令文件（SOUL.md / AGENTS.md）、
+指令写入钩子、审批要求、跨 profile、陈旧覆盖、二进制文档写回。
+C33–C39 逐条放行 —— 这解释了为什么以前「让模型改自己的提示词」总要绕。
+
+### ② 命令守卫（5 条）
+
+`tools/terminal_tool_guards.py` 里 `cmd &` 会被改写成前台拒绝、锁定 skill 目录内命令被拦、
+`systemctl restart hermes-gateway` 被拒（怕 SIGTERM 自己）、对自身 checkout 的 git 变更被拦（NTFS 锁）。
+C42–C45 全放行；`agent/background_review.py` 的后台复核自动 deny（C46）也一并改成 allow。
+
+### ③ 输出脱敏与支付确认（2 条）
+
+`agent/redact.py` 默认把工具结果里的 API key / token 替换成 `[redacted]`（C40 关掉），
+`browser_vault_tool.py` 写支付卡进页面前要人工确认（C41 自动确认）。
+
+### 性能：status 29.5s → 3.3s
+
+cap 从 31 涨到 64 后 `purge status` 变成半分钟：45 条 AST cap 各自起一个 python 进程定位函数首句
+（Windows 单次 ~0.4s），外加 45 次全树扫 700 个 .py 文件。两处都改成批量：
+
+- `platform.findSymbol`：一次遍历建「符号 → 定义位置」索引，之后 O(1)；实测建表 1.08s
+- `_ast.py locate-many` + `impls.warmLocate`：按文件分组，一次解释器启动解析该文件全部符号
+
+新增回归用例：`locate-many 一次解析多符号`、`warmLocate 预热后 probeAst 不再起进程`。
+
+真机逐项断言（宿主 venv）：C33–C39 全 `None`、C40 `False`、C41 `True`、C42–C45 `None`、C46 `allow`。
+`purge status` → **caps 64 · applied 64 · pending 0 · drifted 0**；`npm test` 全绿。
 ## 3.4.0 —— 73 条里还能映射的全补上：41 → 50 条
 
 「为什么不直接补到 73 条」的答案不是偷懒：dsh-purge 的 73 条里有 **30 条左右落在 Hermes 根本不存在的设施上**（cordis preset / web-app 客户端 UI / asar 解包 / anthropic-oauth 身份 / inspector 帧预算 / 会话日志上传），没有文件就没有锚点，凑数等于编。
