@@ -89,6 +89,34 @@ README 泳道那段也挂上了链接。本轮纯文档，无代码改动；全�
 
 验证：全量 41+30+33+12+16+10+7+12+4+9+2+4+4+3+5+4+DOM 全绿；本机 31/31 + L2 通过。
 
+## 本轮变更（第 67 轮 · 修 insertAfter 误判 + 沙箱那 3 条异常）
+
+上一轮结尾留了「0.21.4/0.21.5 沙箱 pending 1 · drifted 2」，这轮查清了，是两个独立问题：
+
+**① `insertAfter` 判活太松（真 bug，会影响所有 `ins()` 型 cap）**
+
+老判定：锚点后 240 字符内出现同样的 `return X` 就算 applied。
+函数体本来就常以同样的 return 开头 → **没打补丁也报 applied**。0.21.5 上的 C37 就是这样被漏掉的
+（status 说已生效，文件里却没有 marker）。
+
+新判定：必须看到「锚点 + 我们插进去那句 + `  # [hermes-purge]`」。
+`test/insert-after.js` 4 项锁住（含「函数体同形 return 不算」「apply 后确实有 marker」）。
+
+**② C42/C43 的锚点在上游根本不存在**
+
+`trailing_amp_background_command` / `locked_skill_block` 在 0.21.0~HEAD 都不存在
+（`terminal_tool_guards.py` 里真实的守卫是 `gateway_lifecycle_block` / `self_repo_block`）。
+标注 `since` 归入「该版本无此机制」，不污染 drifted。顺带让 `0.0.0` 占位版本的树也能正确归类。
+
+结果：
+
+```
+本机 0.21.0   caps 64 · applied 56 · drifted 0   L1 18 / L2 14 通过
+0.21.4 沙箱   caps 64 · applied 61 · drifted 0   L1 28 项通过
+0.21.5 沙箱   caps 64 · applied 61 · drifted 0   L1 28 项通过
+全量          21 组全绿
+```
+
 ## 本轮变更（第 66 轮 · 合并 64 条 cap + 两套批处理实现去重）
 
 main 连推 3 个提交（50 → 64 条 cap，status 29.5s→3.3s 收尾，3.5.1 发布）。合并时发现

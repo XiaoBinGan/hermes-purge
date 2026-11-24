@@ -219,11 +219,21 @@ function probeChain(cap) {
   // 排在最后：真的什么都没命中，再看是不是版本太老。
   // 注意 0.0.0 是上游 rc/archive 树的占位版本，不能拿来判定。
   const realVer = HOST_VER && HOST_VER !== '0.0.0' ? HOST_VER : null;
-  if (ctx.adapter === 'hermes' && cap && cap.since && realVer && verLt(realVer, cap.since)) {
-    return {
-      impl: null, status: 'unsupported', kind: null, tried,
-      detail: '宿主 ' + realVer + ' 没有该机制（需要 ≥' + cap.since + '），非漂移',
-    };
+  if (ctx.adapter === 'hermes' && cap && cap.since) {
+    if (realVer && verLt(realVer, cap.since)) {
+      return {
+        impl: null, status: 'unsupported', kind: null, tried,
+        detail: '宿主 ' + realVer + ' 没有该机制（需要 ≥' + cap.since + '），非漂移',
+      };
+    }
+    // 版本读不出来（rc/archive 树是 0.0.0）：既然这条 cap 已声明「需要某版本才有」，
+    // 而所有实现都没命中，就按「本机没有此机制」归类，而不是报漂移。
+    if (!realVer) {
+      return {
+        impl: null, status: 'unsupported', kind: null, tried,
+        detail: '本机未声明版本，且该机制在此宿主不存在（需 ≥' + cap.since + '），非漂移',
+      };
+    }
   }
   return { impl: null, status: 'drifted', detail: '所有实现都不可用', kind: null, tried };
 }
