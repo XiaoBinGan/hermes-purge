@@ -126,6 +126,41 @@ t('不属于任何 hermes home 的目录不会误认 pm venv', () => {
   assert.deepStrictEqual(platform.sitePackages(root), []);
 });
 
+t('宿主版本：install-stamp 优先，pyproject 的 0.0.0 不算版本', () => {
+  const root = path.join(tmp, 'ver');
+  fs.mkdirSync(path.join(root, 'hermes_agent'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'pyproject.toml'), '[project]\nversion = "0.0.0"\n');
+  assert.strictEqual(platform.hermesVersion(root), null, '0.0.0 不该被当成版本');
+  fs.writeFileSync(path.join(root, 'install-stamp.json'),
+    JSON.stringify({ baseVersion: '0.21.4', displayVersion: 'git.abc.dirty' }));
+  assert.strictEqual(platform.hermesVersion(root), '0.21.4', 'baseVersion 应优先');
+  fs.writeFileSync(path.join(root, 'install-stamp.json'),
+    JSON.stringify({ baseVersion: 'unknown', displayVersion: 'git.abc.dirty' }));
+  assert.strictEqual(platform.hermesVersion(root), 'git.abc.dirty', 'baseVersion=unknown 时用 displayVersion');
+  fs.rmSync(path.join(root, 'install-stamp.json'));
+  fs.writeFileSync(path.join(root, 'hermes_agent', '__init__.py'), '__version__ = "0.22.1"\n');
+  assert.strictEqual(platform.hermesVersion(root), '0.22.1', '__init__ 兜底');
+});
+
+t('1.x 入口是转发壳：--status/--apply --dry 走 v2（issue 里的「未知 kind」根因）', () => {
+  const { spawnSync } = require('child_process');
+  const ROOT = path.join(__dirname, '..');
+  const LEGACY = path.join(ROOT, 'bin', 'hermes-purge.js');
+  const host = path.join(tmp, 'legacyHost');
+  fs.mkdirSync(path.join(host, 'agent'), { recursive: true });
+  fs.mkdirSync(path.join(host, 'tools'), { recursive: true });
+  fs.mkdirSync(path.join(host, 'hermes_cli'), { recursive: true });
+  fs.writeFileSync(path.join(host, 'pyproject.toml'), '[project]\nversion = "0.21.4"\n');
+  const r = spawnSync(process.execPath, [LEGACY, '--status', '--json', '--target=' + host], { encoding: 'utf8' });
+  assert.strictEqual(r.status, 0, r.stderr);
+  const j = JSON.parse((r.stdout || '{}').trim());
+  assert.strictEqual(j.adapter, 'hermes', '没转发到 v2：' + (r.stdout || '').slice(0, 200));
+  assert.strictEqual(j.rows.length, 77, 'cap 条数不对: ' + j.rows.length);
+  const d = spawnSync(process.execPath, [LEGACY, '--apply', '--dry', '--target=' + host], { encoding: 'utf8' });
+  assert.strictEqual(d.status, 0, d.stderr);
+  assert.ok(/预演|dry/i.test(d.stdout || ''), 'dry 没走 v2：' + (d.stdout || '').slice(0, 200));
+});
+
 t('符号定位：def / class / 模块级赋值 都能找到', () => {
   const root = path.join(tmp, 'sym');
   fs.mkdirSync(path.join(root, 'pkg'), { recursive: true });

@@ -348,12 +348,19 @@ function cmdParity() {
 function cmdStatus() {
   const rows = collectRows();
   if (args.json) {
-    console.log(JSON.stringify({ target: TARGET, adapter: ADAPTER.id, python: py, rows }, null, 2));
+    console.log(JSON.stringify({ target: TARGET, adapter: ADAPTER.id, python: py, hermes: platform.hermesVersion ? platform.hermesVersion(TARGET) : null, rows }, null, 2));
     return;
   }
 
   const by = (s) => rows.filter((r) => r.status === s).length;
   console.log(C.b + 'purge v2' + C.reset + (ADAPTER.id === 'hermes' ? '' : ' ' + C.dim + '· ' + ADAPTER.id + C.reset) + '  target=' + TARGET);
+  // 宿主版本：以前只在 1.x 入口显示，且读 pyproject 的占位 0.0.0（pm/editable 装法全是这个值）。
+  // 现在统一由 platform.hermesVersion 多来源解析，读不到就说 unknown —— 不再编数字。
+  const hv = platform.hermesVersion ? platform.hermesVersion(TARGET) : null;
+  if (hv) {
+    const isGit = /^git\./.test(hv);
+    console.log(C.dim + 'hermes=' + hv + (isGit ? '（源码装：版本按锚点匹配结果判定）' : '') + C.reset);
+  }
   console.log(ADAPTER.host.label + '=' + (py || '(无)') + '  ·  caps ' + rows.length + '  ·  ' +
     paint('applied ' + by('applied'), C.g) + '  ' + paint('pending ' + by('pending'), C.y) + '  ' +
     paint('drifted ' + by('drifted'), C.r) + '\n');
