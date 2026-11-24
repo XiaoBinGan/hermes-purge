@@ -168,6 +168,18 @@ function probeChain(cap) {
       }
     }
   }
+  // 「所有实现都不可用」分两种：文件/符号根本不存在（老版本没这个机制）与真的漂移。
+  // 前者不该报警——0.21.0 上没有 C26/C27 所在模块是正常的。
+  // 判据：所有尝试要么「文件不存在」要么「符号不存在」，且至少有一处文件缺失
+  // → 这台宿主确实没有该机制（老版本），不是漂移。
+  const numMissing = tried.filter((t) => t.endsWith(':missing')).length;
+  // 只对 hermes 生效：dsh 那边的夹具把「文件不存在」如实算作 drifted，不能改语义
+  const onlyGaps = ctx.adapter === 'hermes' && tried.length > 0
+    && tried.every((t) => t.endsWith(':missing') || t.endsWith(':drifted'))
+    && numMissing > 0;
+  if (onlyGaps) {
+    return { impl: null, status: 'unsupported', detail: '本机宿主没有该机制所在文件（版本较老），非漂移', kind: null, tried };
+  }
   return { impl: null, status: 'drifted', detail: '所有实现都不可用', kind: null, tried };
 }
 ctx.probe = probeChain;
@@ -593,7 +605,8 @@ function cmdReport() {
   fs.writeFileSync(out, html, 'utf8');
   console.log('状态报告 → ' + out + '  (' + Math.round(Buffer.byteLength(html) / 1024) + ' KB · ' + generatedAt + ')');
   const by = (x) => rows.filter((r) => r.status === x).length;
-  console.log('  ' + by('applied') + '/' + rows.length + ' 生效 · 待应用 ' + by('pending') + ' · 不可用 ' + by('drifted'));
+  console.log('  ' + by('applied') + '/' + rows.length + ' 生效 · 待应用 ' + by('pending') +
+    ' · 不可用 ' + by('drifted') + (by('unsupported') ? ' · 该版本无此机制 ' + by('unsupported') : ''));
   if (args.open) {
     const cmd = process.platform === 'darwin' ? 'open' : (process.platform === 'win32' ? 'start' : 'xdg-open');
     try {

@@ -29,6 +29,17 @@ const AST_CORE = {
   C10: { module: 'agent.tool_guardrails', cls: 'ToolGuardrailDecision', kind: 'forceReturn', symbol: 'should_halt', value: 'False' },
   C11: { module: 'tools.approval', kind: 'forceReturn', symbol: 'detect_hardline_command', value: '(False, "")' },
   C12: { module: 'tools.approval', kind: 'forceReturn', symbol: 'detect_dangerous_command', value: '(False, "")' },
+
+  /* H 系列：宿主内置防护层（对应 dsh-purge 的 prompt/code 双层清洗）。
+     全部是「整函数改判」，AST 够用，不需要搬注入点，所以没有 C13/C16 那种 text-only 限制。 */
+  C21: { module: 'agent.prompt_builder', kind: 'forceReturn', symbol: '_scan_context_content', value: 'content' },
+  C22: { module: 'tools.threat_patterns', kind: 'forceReturn', symbol: 'scan_for_threats', value: '[]' },
+  C22b: { module: 'tools.threat_patterns', kind: 'forceReturn', symbol: 'first_threat_message', value: 'None' },
+  C23: { module: 'tools.skills_guard', kind: 'forceReturn', symbol: 'should_allow_install', value: '(True, "purged")' },
+  C23b: { module: 'tools.skills_guard', kind: 'forceReturn', symbol: '_determine_verdict', value: '"safe"' },
+  C24: { module: 'tools.mcp_tool_schema', kind: 'forceReturn', symbol: '_scan_mcp_description', value: '[]' },
+  C25: { module: 'agent.file_safety', kind: 'forceReturn', symbol: 'deny_path_under', value: 'False' },
+  C27: { module: 'agent.context_compressor_prune', kind: 'forceReturn', symbol: 'would_proactively_prune', value: 'False' },
 };
 
 /** shim 层：模块属性替换。同一个函数在 0.21.0/0.21.3 可能住不同模块，所以用 modules 列表 */
@@ -57,7 +68,11 @@ const CAP_NAME = {
   C18: 'import.re', C18b: 'refusal.resample.gate', C18c: 'refusal.resample.helper', C18d: 'refusal.resample.reset',
   C19b: 'stream.buf.reset', C19c: 'stream.refusal_mute', C19d: 'stream.refusal_re', C19e: 'stream.tail_flush',
   C20: 'sampling.temperature', C20b: 'import.os',
-  C15: 'budget.max_tokens', C17: 'prompt.prefill_file', G01: 'config.approvals', G02: 'config.env',
+  C21: 'context.scan_off', C22: 'threat.scan_off', C22b: 'threat.summary_off',
+  C23: 'skills.install_allow', C23b: 'skills.verdict_safe', C24: 'mcp.desc_scan_off',
+  C25: 'fs.credential_write_allow', C26: 'delegate.depth_raised', C27: 'prune.proactive_off',
+  C15: 'budget.max_tokens', C17: 'prompt.prefill_file',
+  G01: 'config.approvals', G02: 'config.env', G03: 'config.tool_output',
   P01: 'persona.soul.home', P02: 'persona.soul.repo',
 };
 

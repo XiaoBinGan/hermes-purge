@@ -1,6 +1,6 @@
 {
   "name": "hermes-purge",
-  "version": "3.2.0",
+  "version": "3.3.0",
   "description": "宿主无关的能力层（capability）引擎 —— adapter 注册表 + AST/shim/文本/配置 四层落地，内置 Hermes Agent 与 DeepSeek Harness 两个 adapter；事务回滚 + 三级验证 + 观测。跨 macOS / Windows。",
   "license": "MIT",
   "author": "XiaoBinGan",
@@ -52,7 +52,7 @@
     "apply": "node bin/hermes-purge.js --apply",
     "verify": "node bin/hermes-purge.js --verify",
     "revert": "node bin/hermes-purge.js --revert",
-    "test": "node test/smoke.js && node test/v2.js && node test/dsh.js && node test/setup.js && node test/bench.js && node test/plugin.js && node test/control.js && node test/desktop.js && node test/desktop-dom.js && node test/parity.js && node test/conf-yaml.js && node test/sentinel.js && node test/agent.js && node test/panel-sync.js && node test/parity-layers.js && node test/ast-batch.js && node test/panel-stale.js && node test/agent-restart.js && node test/install-sh.js",
+    "test": "node test/smoke.js && node test/v2.js && node test/dsh.js && node test/setup.js && node test/bench.js && node test/plugin.js && node test/control.js && node test/desktop.js && node test/desktop-dom.js && node test/parity.js && node test/conf-yaml.js && node test/sentinel.js && node test/agent.js && node test/panel-sync.js && node test/parity-layers.js && node test/ast-batch.js && node test/panel-stale.js && node test/agent-restart.js && node test/install-sh.js && node test/version-gap.js",
     "test:package": "node test/package.js",
     "test:dsh": "node test/dsh.js",
     "v2": "node bin/purge.js",
@@ -74,7 +74,8 @@
     "test:agent-restart": "node test/agent-restart.js",
     "test:win": "powershell -NoProfile -ExecutionPolicy Bypass -File test/win/run-smoke.ps1",
     "test:engine": "powershell -NoProfile -ExecutionPolicy Bypass -File test/win/run-engine.ps1",
-    "test:install": "node test/install-sh.js"
+    "test:install": "node test/install-sh.js",
+    "test:gap": "node test/version-gap.js"
   },
   "engines": {
     "node": ">=18"

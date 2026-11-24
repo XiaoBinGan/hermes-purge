@@ -89,6 +89,31 @@ README 泳道那段也挂上了链接。本轮纯文档，无代码改动；全�
 
 验证：全量 41+30+33+12+16+10+7+12+4+9+2+4+4+3+5+4+DOM 全绿；本机 31/31 + L2 通过。
 
+## 本轮变更（第 64 轮 · 跟上 41 条 cap，并区分「版本缺口」与「漂移」）
+
+新判据生效第一轮就抓到 main 前进：`60bc97c feat: 补上宿主防护层，31 → 41 条 cap`。
+合并后本机出现 **pending 7 · drifted 3**，逐条查过：
+
+| cap | 0.21.0 上的情况 | 处理 |
+|---|---|---|
+| G03 / C21 / C22 / C22b / C23 / C23b / C24 | 文件都在，只是待应用 | `apply` 后全部生效 |
+| C25 `fs.credential_write_allow` | 0.21.0 没有 `deny_path_under()`，等价物是 `build_write_denied_paths(home)` | 新增 `lib/anchors/hermes-0.21.0-addendum.js`，在该函数里 `return set()` |
+| C26 `delegate.depth_raised` | `tools/delegate_tool_config.py` **不存在** | 标 `unsupported` |
+| C27 `prune.proactive_off` | `agent/context_compressor_prune.py` **不存在** | 标 `unsupported` |
+
+顺带修了两个真问题：
+
+1. **`insertAfter` 双 marker**：`ret` 里自己写了 `# [hermes-purge]`，applier 又补一个 →
+   `return set()  # …  # [hermes-purge]`。改成 `ret` 不带 MARK、变体显式给 `sentinel`。
+2. **「该版本没有此机制」不该算 drifted**：所有尝试要么 `:missing` 要么 `:drifted` 且至少一处缺文件
+   → 报 `unsupported`（带说明「本机宿主没有该机制所在文件（版本较老），非漂移」）。
+   **只对 hermes adapter 生效** —— dsh 夹具那边「文件不存在」就该是 drifted（改完全量 dsh 33 项仍绿）。
+
+结果：**caps 41 · applied 39 · pending 0 · drifted 0 · unsupported 2**，L1 13 项 / L2 14 项通过。
+0.21.4 / 0.21.5 沙箱：`41 · applied 40 · drifted 0`（各剩 1 条版本缺口）。
+
+`test/version-gap.js` 3 项（缺文件报 unsupported / 不计入 drifted / dsh 不受影响）；全量 20 组全绿。
+
 ## 本轮变更（第 62 轮 · mac 安装器对齐 win 的三项能力）
 
 Windows 那边刚给 `install.ps1` 补了三件事，mac 侧此前**只在 Windows 成立**，这轮补齐：
