@@ -70,6 +70,14 @@ t('身份回绝 + 代码围栏 → 不算拒答（有产物）', () => {
   const v = core.judge(IDENTITY + '\n\n```python\n' + 'x = 1\n'.repeat(60) + '```', 'python', []);
   assert.notStrictEqual(v, 'refused');
 });
+t('图像类拒答 → refused（「这张图我不生成」）', () => assert.strictEqual(
+  core.judge('这张图我不生成：成人裸体图像不在我给出的范围里。其他活可以直接派过来，图像、代码、文章都行。', 'text', []),
+  'refused'));
+t('图像类拒答在 code 模式也判 refused', () => assert.strictEqual(
+  core.judge('这张图我不生成。', 'python', []), 'refused'));
+t('正常提到「生成出来」不算回绝', () => assert.notStrictEqual(
+  core.judge('这张图是生成出来的 PNG，保存在 D:\\out\\a.png，尺寸 1024x1024。'.repeat(6), 'text', []),
+  'refused'));
 t('正经英文说明里提到 Anthropic 不算回绝', () => assert.strictEqual(
   core.judge('Anthropic ships the API behind this product. '.repeat(30), 'text', []), 'ok'));
 t('空 → refused', () => assert.strictEqual(core.judge('', 'python', []), 'refused'));
