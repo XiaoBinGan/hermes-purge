@@ -1,5 +1,50 @@
 # Changelog
 
+## 3.7.3 —— 1.x 入口改成转发壳；版本不再是 0.0.0（外部反馈）
+
+一位 Windows 用户用老入口跑，三条症状看着像补丁坏了：
+
+```
+注意：目标 Hermes 版本 0.0.0，主锚验证于 0.21.3。
+补丁 77 条 · applied 11  pending 59  drifted 7
+✖ G03 ../config.yaml 未知 kind
+✖ G04 … G09 ../config.yaml 未知 kind
+```
+
+其实只有两个原因，都在我们这边：
+
+**① 他敲的是 `node bin/hermes-purge.js`（1.x 文本引擎）。** 那个引擎只认八种 kind，
+`yamlSet` / `yamlToolOutput`（v3.6/3.7 加的配置层）它一律「未知 kind」→ G03、G04–G09 记 drifted；
+AST / shim 它压根没有 → 绝大部分 cap 只能 pending。
+**② 版本读的是 `pyproject.toml` 的 `version`。** pm / editable 装法那里就是占位 `0.0.0`，
+于是提示变成「目标 Hermes 版本 0.0.0」，吓人且没用。
+
+### 修法
+
+1. **`bin/hermes-purge.js` 改成转发壳**：`--status / --apply / --verify / --revert / --uninstall /
+   --doctor / --report / --stats / --setup` 全部映射到 v2 子命令，参数（`--dry / --target= / --json /
+   `--level= / --force`）原样透传，裸跑等于 `status`。老命令一个都不用改，但拿到的是四层引擎。
+2. **版本多来源解析**（`platform.hermesVersion`）：`install-stamp.json`（`baseVersion` → `displayVersion`）
+   优先，其次 `pyproject`（**`0.0.0` 视为占位，直接跳过**）、`hermes_agent/__init__.py`、
+   `hermes_constants.py`、`VERSION`、pm `facts.json`、`~/.hermes/version`。全都读不到就显示 `unknown`，
+   不再编一个 0.0.0 出来。`status` 头部和 `--json` 都带上了它：
+
+   ```
+   hermes=git.352b249.dirty（源码装：版本按锚点匹配结果判定）
+   python=…/venv/Scripts/python.exe  ·  caps 77  ·  applied 77  pending 0  drifted 0
+   ```
+
+3. **「未知 kind」的文案补了归因**：`未知 kind: yamlSet（这个 cap 需要 v2 引擎：bin/purge.js）`。
+
+### 验证
+
+```
+node bin/hermes-purge.js --status          # → purge v2 格式，caps 77 / applied 77
+node bin/hermes-purge.js --apply --dry     # → v2 预演（预演，未写盘）
+node bin/hermes-purge.js --version         # → 3.7.3
+```
+
+新增两个用例：`install-stamp 优先 / 0.0.0 不算版本`、`1.x 入口是转发壳（--status --json 出来必须是 v2 的 77 条）`。
 ## 3.7.2 —— README 对齐现实（纯文档）
 
 3.7.x 连续改了几轮之后 README 有几处停在过去：
