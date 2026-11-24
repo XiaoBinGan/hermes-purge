@@ -55,7 +55,7 @@ function usageText() {
     '  purge status [--json]        每条 cap 当前走哪层实现',
     '  purge apply  [--dry]         事务式应用（快照 → 写 → 校验）',
     '  purge verify [--level=1|2|3] 静态 / 运行时 / 端到端',
-    '  purge revert [--force]       按 manifest 逐字节还原',
+    '  purge revert [--force] [--one]  按 manifest 逐字节还原（默认撤全部，--one 只撤最后一层）',
     '  purge doctor                 体检：哈希漂移 / 临时文件 / shim',
     '  purge report [--open] [--out=F]  生成单文件 HTML 状态报告（离线可开，能发给别人）',
     '  purge plugin [install|uninstall|status]  装一个 Hermes 插件：/purge 命令 + purge_status 工具',
@@ -243,10 +243,24 @@ ctx.probe = probeChain;
 
 /** 每条 cap 的当前状态（status 与 report 共用同一份数据，避免两处口径漂移） */
 function collectRows() {
-  return CAPS.map((cap) => {
+  const rows = CAPS.map((cap) => {
     const r = probeChain(cap);
     return { id: cap.id, cap: cap.cap, layer: cap.layer, impl: r.kind, status: r.status, detail: r.detail, tried: r.tried };
   });
+  // 依赖修正：带 requires 的 cap（C54 的锚点由 C18c 注入产生），依赖没落地时
+  // 「锚点找不到」不是漂移，而是还没轮到它 —— 报 pending 并点名等谁。
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  for (const row of rows) {
+    if (row.status !== 'drifted') continue;
+    const cap = CAPS.find((c) => c.id === row.id);
+    if (!cap || !cap.requires) continue;
+    const missing = cap.requires.filter((id) => (byId.get(id) || {}).status !== 'applied');
+    if (missing.length) {
+      row.status = 'pending';
+      row.detail = '等 ' + missing.join(', ') + ' 先应用';
+    }
+  }
+  return rows;
 }
 
 /* ───────────── 跨机等效性对账（mac / win 两边"效果一样"靠它）───────────── */
@@ -504,7 +518,13 @@ function cmdApply() {
   }
 
   if (!dry && snap) {
-    txn.commit(snap, { caps: CAPS.length });
+    if (changed === 0) {
+      // 全幂等（改写 0）：不留快照。否则撤销栈被空层淹没 —— 实测 17 个快照里大多是 0 改写，
+      // 用户按一次 revert 只撤掉一个空层，看起来「revert 没反应」。
+      txn.abort(snap);
+    } else {
+      txn.commit(snap, { caps: CAPS.length });
+    }
     metrics.record(TARGET, { event: 'apply', changed, skipped, failed, shim: ctx.shimEntries.length });
     console.log('\n改写 ' + changed + ' · 跳过 ' + skipped + ' · 未命中 ' + failed);
     if (!args['no-verify']) {
@@ -559,7 +579,7 @@ function cmdRevert() {
   const covered = txn.coveredPaths(TARGET, { id: args.id });
   const r0 = ADAPTER.uninstallShim ? ADAPTER.uninstallShim(TARGET, { skip: covered, py: ctx.py }) : { removed: [] };
   if (r0.removed.length) console.log('已移除 shim：' + r0.removed.length + ' 个文件');
-  const r = txn.revert(TARGET, { force: !!args.force, id: args.id });
+  const r = txn.revert(TARGET, { force: !!args.force, id: args.id, all: args.one !== true });
   if (!r.ok) {
     console.log(paint('回滚未完成：' + (r.reason || '') , C.r));
     if (r.drifted && r.drifted.length) {

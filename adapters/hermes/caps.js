@@ -160,6 +160,7 @@ function buildCaps() {
       id: p.id,
       layer: p.layer,
       since: p.since,      // 该机制从哪个宿主版本开始存在（版本闸门用）
+      requires: p.requires, // 锚点由别的 cap 注入产生时声明依赖（如 C54 依赖 C18c）
       cap: CAP_NAME[p.id] || p.id,
       note: p.note,
       astMeta: astMeta || null,
