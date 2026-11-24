@@ -1,5 +1,49 @@
 # Changelog
 
+## 3.8.0 —— mac 泳道并入 main：32 个提交（含两处判活修复）
+
+`lane/mac` 在这段时间里累积了 32 个提交 / 2282 行，全都在 main 之外。这版把它们并进来，
+两侧第一次真正对齐（版本号、cap 数、判活规则、文档基线）。
+
+### 拿到的修复（这两条对 Windows 同样重要）
+
+1. **`insertAfter` 判活变严**：老判定是「锚点后 240 字符内出现同样的 `return X` 就算 applied」——
+   函数体本来就常以同样的 `return None` 开头，于是**没打补丁也报 applied**（mac 侧在 0.21.5 上实测漏过 C37）。
+   现在必须见到「插入句 + `  # [hermes-purge]`」。
+2. **`SINCE` 版本标注**：`C26/C27/C51 → 0.21.4`、`C42/C43/C50/C31/C31b/C32b` 各有标注。
+   老宿主上缺这些机制时归 `unsupported`，不再污染 `drifted 0` 这个判据。
+
+### 拿到的新功能
+
+| 功能 | 说明 |
+|------|------|
+| `purge agent install/status/uninstall` | macOS 开机自启（LaunchAgent）；服务被 kill 后能自起 |
+| 面板快照过期检测 + 自动刷新 | `apply`/`revert` 后自动同步面板快照，`--no-panel-sync` 可关；`doctor` 报「过期」并给修复命令 |
+| `parity --diff` 按层结论 | 指纹 schema=2 带 `layers` 汇总（code/config/prompt），仍能比 schema=1 的老指纹 |
+| 批量 AST 定位 | 一次解释器启动解析同文件多个符号（我们第五轮也做过一版，合并时收敛成一套） |
+| `hermes-0.21.0-addendum.js` | C31/C31b/C32b/C40/C25 在 0.21.0 上的补充锚点 |
+| `scripts/lane-guard.sh` | 四条泳道约束的可执行自检 |
+| `install.sh` 对齐 win | 镜像 / PATH / 重试与 `install.ps1` 同构 |
+| 文档 | `docs/lane-sync.md`（待办板）、`mac-backlog.md`、`win-handoff.md`、`lane-history.md` |
+
+### Windows 侧这轮的两处修补
+
+合并后 mac 写的三个面板用例在 Windows 上挂（`status !== 0`）：它们的夹具没建 `site-packages`，
+而 3.7.1 起 **shim 注入失败会让 `apply` 退出 1**（issue #15 的要求）。已把 `panel-sync` / `parity-layers`
+的夹具补成真宿主形状 —— 不是放宽断言去迁就，而是夹具本来就该有 venv。
+
+### 合并后本机验证
+
+```
+npm test                    22 个测试文件全绿（54/47/33/15/16/10/7/12 + DOM + parity + conf + sentinel + panel* + agent* + ast-batch + insert-after + version-gap + install-sh）
+purge apply                 改写 0 · 跳过 77 · shim 16 条 · 2 个文件（幂等）
+purge status                caps 77 · applied 77 · pending 0 · drifted 0
+purge verify --level=2      L1 32 项 / L2 14 项 通过
+purge doctor                健康
+```
+
+顺带一提：`doctor` 这次报出的「面板快照过期：面板里是 3.2.0，当前 3.7.3」正是新并进来的检测功能抓到的，
+`purge desktop sync` 已修好 —— 之前这块一直是静默过期。
 ## 3.7.3 —— 1.x 入口改成转发壳；版本不再是 0.0.0（外部反馈）
 
 一位 Windows 用户用老入口跑，三条症状看着像补丁坏了：

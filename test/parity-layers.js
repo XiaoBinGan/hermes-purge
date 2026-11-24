@@ -22,6 +22,9 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'hp-pl-'));
 fs.mkdirSync(path.join(tmp, 'agent'), { recursive: true });
 fs.mkdirSync(path.join(tmp, 'hermes_cli'), { recursive: true });
 fs.writeFileSync(path.join(tmp, 'config.yaml'), 'model:\n  default: x\n');
+// 夹具要像个真宿主：shim 落 site-packages，apply 才不会按 issue #15 的约定退出 1
+fs.mkdirSync(path.join(tmp, 'venv', 'Lib', 'site-packages'), { recursive: true });
+fs.mkdirSync(path.join(tmp, 'venv', 'lib', 'python3.11', 'site-packages'), { recursive: true });
 
 const run = (...a) => spawnSync(process.execPath, [CLI, ...a, '--target=' + tmp], { encoding: 'utf8' });
 

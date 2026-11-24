@@ -27,6 +27,10 @@ function makeHost() {
   fs.writeFileSync(path.join(home, '.env'), '');
   fs.writeFileSync(path.join(home, 'SOUL.md'), '# soul\n');
   fs.writeFileSync(path.join(tree, 'SOUL.md'), '# soul\n');
+  // shim 层要往 site-packages 写 .pth；没有它 apply 会按 issue #15 的约定退出 1，
+  // 这里的断言（status === 0）就全挂了。夹具得像真宿主。
+  fs.mkdirSync(path.join(tree, 'venv', 'Lib', 'site-packages'), { recursive: true });
+  fs.mkdirSync(path.join(tree, 'venv', 'lib', 'python3.11', 'site-packages'), { recursive: true });
   const dist = path.join(tree, 'apps', 'desktop', 'dist');
   fs.mkdirSync(dist, { recursive: true });
   fs.writeFileSync(path.join(dist, 'index.html'), '<!doctype html><html><body></body></html>');
