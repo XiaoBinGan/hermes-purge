@@ -12,7 +12,7 @@
 | 版本 | 3.8.2（两边一致） |
 | 补丁面 | **78 条**（两边 cap 清单完全一致） |
 | macOS 实机（Hermes 0.21.0） | `caps 78 · applied 65 · pending 0 · drifted 0` · L1 19 / L2 14 通过 |
-| 0.21.4 / 0.21.5 沙箱 | `applied 73 · drifted 0` |
+| 0.21.4 / 0.21.5 / 0.21.6 / 0.21.7 沙箱 | `applied 76 · unsupported 3 · drifted 0` |
 | 效果指纹 | `purge parity --out=mac.json` → 65/78 |
 
 ## ⚠️ Windows 侧待办（2026-11-24 22:50 更新，三件事）
@@ -49,7 +49,19 @@ grep -c 'hermes-purge' G:/hermes/hermes-agent/tools/terminal_tool_guards.py
 # 状态说 applied 但文件里 marker 数是 0 → 就是这个 bug
 ```
 
-### ④ 3.8.2 新增的 C52 锚点在任何样本里都不存在
+### ④ 剩下 3 条锚点在上游任何版本都不存在（0.21.x 全系无法生效）
+
+| cap | 声称的锚点 | 上游实况 |
+|---|---|---|
+| C27 | `agent/context_compressor_prune.py: would_proactively_prune()` | **文件不存在**（0.21.0~0.21.7 与 HEAD 全无） |
+| C50 | `REDACT_WALK_MAX_DEPTH = 320` | 常量在**任何版本**都不存在 |
+| C52 | `tools/approval_wmic.py` | **文件不存在**（0.21.0~HEAD 全无） |
+
+mac 侧已把能落的都落到真实函数上（C31→`scan_file`、C31b→`scan_skill`、C32b→`get_read_block_error`、
+C40→`_REDACT_ENABLED`、C42/C43→`gateway_lifecycle_block`/`self_repo_block`），
+0.21.4~0.21.7 统一到 **76/79**。剩下这 3 条需要 win 侧给出真实锚点。
+
+### ⑤ 3.8.2 新增的 C52 锚点在任何样本里都不存在
 
 `tools/approval_wmic.py` 在 0.21.0 / 0.21.4 / 0.21.5 / 0.21.6 / 0.21.7 / 上游 HEAD **全部 0 命中**。
 已标 `since: 0.21.99` 归入版本缺口，但锚点本身需要 win 侧核实（第四次了）。
